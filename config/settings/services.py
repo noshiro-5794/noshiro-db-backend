@@ -39,3 +39,14 @@ AI_AGENT_MODEL = os.getenv(
 )
 
 AI_AGENT_TIMEOUT = float(os.getenv("AI_AGENT_TIMEOUT", "30"))
+
+HCAPTCHA_ENABLED = os.getenv("HCAPTCHA_ENABLED", "False") == "True"
+
+HCAPTCHA_SECRET_KEY = os.getenv("HCAPTCHA_SECRET_KEY", "")
+
+HCAPTCHA_SITEVERIFY_URL = os.getenv(
+    "HCAPTCHA_SITEVERIFY_URL",
+    "https://api.hcaptcha.com/siteverify",
+)
+
+HCAPTCHA_TIMEOUT = float(os.getenv("HCAPTCHA_TIMEOUT", "5"))

@@ -7,6 +7,7 @@ from apps.users.services.auth.token_service import TokenService
 from apps.users.services.auth.password_service import PasswordService
 from apps.users.services.auth.register_service import RegisterService
 from apps.users.services.auth.verification_service import VerificationService
+from apps.users.services.auth.captcha_service import CaptchaService
 from apps.users.api.serializers.auth_serializer import (
     SendCodeSerializer,
     RegisterSerializer,
@@ -16,6 +17,13 @@ from apps.users.api.serializers.auth_serializer import (
 )
 
 
+def get_client_ip(request):
+    forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+    return request.META.get("REMOTE_ADDR")
+
+
 class SendCodeView(APIView):
 
     permission_classes = [AllowAny]
@@ -23,6 +31,10 @@ class SendCodeView(APIView):
     def post(self, request):
         serializer = SendCodeSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        CaptchaService.verify_hcaptcha(
+            token=serializer.validated_data.get("hcaptcha_token"),
+            remote_ip=get_client_ip(request),
+        )
         VerificationService.send_code(
             email=serializer.validated_data["email"],
             purpose=serializer.validated_data["purpose"],

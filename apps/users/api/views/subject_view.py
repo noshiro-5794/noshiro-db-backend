@@ -25,6 +25,7 @@ class MyUserSubjectListCreateView(APIView):
             status=request.query_params.get("status"),
             subject_type=request.query_params.get("subject_type"),
             keyword=request.query_params.get("keyword"),
+            tag_id=request.query_params.get("tag_id"),
             ordering=request.query_params.get("ordering", "-updated_at"),
         )
         paginator = DefaultPageNumberPagination()

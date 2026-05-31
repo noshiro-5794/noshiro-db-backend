@@ -6,8 +6,9 @@ from apps.users.models import EmailVerification
 
 class SendCodeSerializer(serializers.Serializer):
 
-    email   = serializers.EmailField()
-    purpose = serializers.ChoiceField(choices=EmailVerification.Purpose.choices)
+    email          = serializers.EmailField()
+    purpose        = serializers.ChoiceField(choices=EmailVerification.Purpose.choices)
+    hcaptcha_token = serializers.CharField(required=False, allow_blank=True, trim_whitespace=True)
 
 
 class RegisterSerializer(serializers.Serializer):

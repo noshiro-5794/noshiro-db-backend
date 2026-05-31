@@ -71,6 +71,13 @@ class SubjectSelector:
         keyword=None,
         subject_type=None,
         nsfw=None,
+        year=None,
+        season=None,
+        platform=None,
+        date_from=None,
+        date_to=None,
+        episodes_min=None,
+        episodes_max=None,
         ordering="-updated_at",
     ):
         qs = cls.base_queryset().filter(subject_type__in=PRIMARY_SUBJECT_TYPES)
@@ -80,6 +87,30 @@ class SubjectSelector:
 
         if nsfw is not None:
             qs = qs.filter(nsfw=nsfw)
+
+        if year:
+            qs = qs.filter(date__year=year)
+
+        if season:
+            qs = cls.filter_by_season(qs, season=season)
+
+        if platform:
+            platform = platform.strip()
+            if platform:
+                qs = qs.filter(platform__icontains=platform)
+
+        if date_from:
+            qs = qs.filter(date__gte=date_from)
+
+        if date_to:
+            qs = qs.filter(date__lte=date_to)
+
+        if episodes_min is not None or episodes_max is not None:
+            qs = cls.filter_by_episode_count(
+                qs,
+                minimum=episodes_min,
+                maximum=episodes_max,
+            )
 
         if keyword:
             keyword = keyword.strip()
@@ -122,6 +153,33 @@ class SubjectSelector:
             | Q(title_cn__icontains=keyword)
             | Q(search_score__gte=0.15)
         )
+
+    @staticmethod
+    def filter_by_season(qs, *, season: str):
+        season_months = {
+            "winter": [1, 2, 3],
+            "spring": [4, 5, 6],
+            "summer": [7, 8, 9],
+            "fall": [10, 11, 12],
+        }
+        months = season_months.get(season)
+        return qs.filter(date__month__in=months) if months else qs
+
+    @staticmethod
+    def filter_by_episode_count(qs, *, minimum=None, maximum=None):
+        if minimum is not None:
+            qs = qs.filter(
+                Q(total_episodes__gte=minimum)
+                | Q(total_episodes__isnull=True, eps__gte=minimum)
+            )
+
+        if maximum is not None:
+            qs = qs.filter(
+                Q(total_episodes__lte=maximum)
+                | Q(total_episodes__isnull=True, eps__lte=maximum)
+            )
+
+        return qs
 
     @classmethod
     def get_subject_or_raise(cls, *, subject_id):

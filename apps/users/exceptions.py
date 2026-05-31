@@ -25,6 +25,12 @@ class VerifyCodeExpired(UserException):
     default_detail = "verify code expired"
 
 
+class InvalidCaptcha(UserException):
+
+    default_code = 11003
+    default_detail = "invalid captcha"
+
+
 class EmailAlreadyExists(UserException):
 
     default_code = 11100

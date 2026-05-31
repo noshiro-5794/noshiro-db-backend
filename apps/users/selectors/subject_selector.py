@@ -47,6 +47,7 @@ class SubjectSelector:
         status=None,
         subject_type=None,
         keyword=None,
+        tag_id=None,
         ordering="-created_at",
     ):
         qs = cls.base_queryset().filter(
@@ -57,6 +58,8 @@ class SubjectSelector:
             qs = qs.filter(status=status)
         if subject_type:
             qs = qs.filter(subject__subject_type=subject_type)
+        if tag_id:
+            qs = qs.filter(tag_relations__tag_id=tag_id).distinct()
         if keyword:
             qs = cls.apply_keyword_search(qs, keyword=keyword)
             return qs.order_by("-search_score", "-created_at", "-id")

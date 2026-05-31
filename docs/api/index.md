@@ -27,6 +27,19 @@ Expected response shape:
 }
 ```
 
+Each subject keeps the legacy flat fields and also includes display-friendly summary fields:
+
+- `display_title`, `title_original`, `title_localized`
+- `year`
+- `images.poster`, `images.thumbnail`, `images.original`
+- `display_meta`, `display_subtitle`
+- `description_excerpt`
+- `source.provider`, `source.id`
+- `content.series`, `content.episodes`, `content.volumes`
+
+External popularity values are intentionally not included in index subject summaries.
+The daily calendar snapshot owns its own display metrics, such as `doing`.
+
 ## Search Subjects
 
 Search by title or Chinese title. Keyword searches sort by relevance first.
@@ -66,6 +79,14 @@ Filter NSFW content:
 
 ```bash
 curl -s -X GET "$BASE_URL/api/index/subjects/?nsfw=false&page=1&page_size=16" | jq
+```
+
+Filter by release year, season, platform, date range, or episode count:
+
+```bash
+curl -s -X GET "$BASE_URL/api/index/subjects/?year=2026&season=spring&page=1&page_size=16" | jq
+curl -s -X GET "$BASE_URL/api/index/subjects/?platform=TV&episodes_min=13&episodes_max=24" | jq
+curl -s -X GET "$BASE_URL/api/index/subjects/?date_from=2026-01-01&date_to=2026-12-31" | jq
 ```
 
 Combine filters:
