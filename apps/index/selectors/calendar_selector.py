@@ -8,4 +8,4 @@ class CalendarSelector:
         qs = CalendarSubject.objects.select_related("subject")
         if weekday_en:
             qs = qs.filter(weekday_en=weekday_en)
-        return qs.order_by("weekday_en", "subject__title", "subject_id")
+        return qs.order_by("weekday_en", "-collection_doing", "subject__title", "subject_id")

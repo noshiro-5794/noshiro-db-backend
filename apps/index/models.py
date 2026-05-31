@@ -141,11 +141,16 @@ class CalendarSubject(models.Model):
         "Subject", on_delete=models.CASCADE, related_name="calendar_entry"
     )
     weekday_en = models.CharField(max_length=16, blank=True)
+    collection_doing = models.PositiveIntegerField(default=0)
 
     class Meta:
         db_table = "calendar_subject"
         indexes = [
             models.Index(fields=["weekday_en"], name="idx_cal_weekday_en"),
+            models.Index(
+                fields=["weekday_en", "-collection_doing"],
+                name="idx_cal_weekday_doing",
+            ),
         ]
 
     def __str__(self):

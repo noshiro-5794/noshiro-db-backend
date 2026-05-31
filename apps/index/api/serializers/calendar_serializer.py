@@ -20,6 +20,7 @@ class CalendarSubjectResponseSerializer(serializers.ModelSerializer):
     image_thumbnail = serializers.CharField(source="subject.image_thumbnail")
     platform = serializers.CharField(source="subject.platform")
     nsfw = serializers.BooleanField(source="subject.nsfw")
+    doing = serializers.IntegerField(source="collection_doing")
 
     class Meta:
         model = CalendarSubject
@@ -32,4 +33,5 @@ class CalendarSubjectResponseSerializer(serializers.ModelSerializer):
             "platform",
             "nsfw",
             "weekday_en",
+            "doing",
         ]

@@ -48,6 +48,9 @@ class CalendarSyncService:
                 bangumi_id = item.get("id")
                 if not isinstance(bangumi_id, int):
                     continue
+                collection = item.get("collection") or {}
+                doing = collection.get("doing") if isinstance(collection, dict) else 0
+                collection_doing = doing if isinstance(doing, int) and doing >= 0 else 0
 
                 item_count += 1
                 try:
@@ -67,6 +70,7 @@ class CalendarSyncService:
                         CalendarSubject(
                             subject=subject,
                             weekday_en=weekday.get("en") or "",
+                            collection_doing=collection_doing,
                         )
                     )
 
