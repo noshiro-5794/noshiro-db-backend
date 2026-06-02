@@ -1,21 +1,33 @@
 from django.db.models import Case, IntegerField, Value, When
 
+from apps.index.models import Episode
+from apps.index.exceptions import SubjectNotFound
 from apps.index.selectors.subject_selector import SubjectSelector
 
 
 class SubjectSectionSelector:
 
     @classmethod
-    def list_subject_episodes(cls, *, subject_id):
+    def list_subject_episodes(cls, *, subject_id, type=None):
         subject = SubjectSelector.get_subject_reference_or_raise(subject_id=subject_id)
 
-        return subject.episodes.order_by("sort", "ep_num", "id")
+        qs = subject.episodes.all()
+        if type:
+            qs = qs.filter(type=type)
+        return qs.order_by("sort", "ep_num", "id")
 
     @classmethod
-    def list_subject_staff(cls, *, subject_id):
+    def get_subject_episode_or_raise(cls, *, subject_id, episode_id):
+        try:
+            return Episode.objects.get(subject_id=subject_id, id=episode_id)
+        except Episode.DoesNotExist:
+            raise SubjectNotFound()
+
+    @classmethod
+    def list_subject_staff(cls, *, subject_id, role=None):
         subject = SubjectSelector.get_subject_reference_or_raise(subject_id=subject_id)
 
-        return (
+        qs = (
             subject.staff_relations.select_related("staff")
             .annotate(
                 role_priority=Case(
@@ -33,6 +45,22 @@ class SubjectSectionSelector:
                 )
             )
             .order_by("role_priority", "role", "staff__name", "id")
+        )
+
+        if role:
+            qs = qs.filter(role=role)
+
+        return qs
+
+    @classmethod
+    def list_subject_staff_roles(cls, *, subject_id):
+        subject = SubjectSelector.get_subject_reference_or_raise(subject_id=subject_id)
+
+        return (
+            subject.staff_relations.exclude(role="")
+            .values_list("role", flat=True)
+            .distinct()
+            .order_by("role")
         )
 
     @classmethod
@@ -74,4 +102,7 @@ class SubjectSectionSelector:
             "id",
         )
 
-        return outgoing, incoming
+        if outgoing.exists():
+            return outgoing, "outgoing"
+
+        return incoming, "incoming"

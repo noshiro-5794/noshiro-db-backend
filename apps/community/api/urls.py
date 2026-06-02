@@ -1,0 +1,176 @@
+from django.urls import path
+
+from apps.community.api.views.activity_view import (
+    MyActivityListView,
+    MyFeedView,
+    PublicUserActivityListView,
+)
+from apps.community.api.views.comment_view import CommunityCommentListCreateView
+from apps.community.api.views.follow_view import (
+    MyFollowerListView,
+    MyFollowingListView,
+    MyFollowToggleView,
+    UserFollowerListView,
+    UserFollowingListView,
+)
+from apps.community.api.views.interaction_view import (
+    CommunityBookmarkListToggleView,
+    CommunityReactionToggleView,
+)
+from apps.community.api.views.notification_view import (
+    MyNotificationListView,
+    MyNotificationReadAllView,
+    MyNotificationReadView,
+    MyNotificationUnreadCountView,
+)
+from apps.community.api.views.post_view import (
+    CommunityPostCommentListCreateView,
+    CommunityPostDetailView,
+    CommunityPostListCreateView,
+)
+from apps.community.api.views.report_view import (
+    CommunityReportCreateView,
+    MyCommunityReportListView,
+    StaffCommunityReportListView,
+    StaffCommunityReportResolveView,
+)
+from apps.community.api.views.relationship_view import (
+    MyBlockListView,
+    MyBlockToggleView,
+    MyMuteListView,
+    MyMuteToggleView,
+)
+
+
+urlpatterns = [
+    path(
+        "me/following/<int:target_user_id>/",
+        MyFollowToggleView.as_view(),
+        name="community-my-follow-toggle",
+    ),
+    path(
+        "me/following/",
+        MyFollowingListView.as_view(),
+        name="community-my-following-list",
+    ),
+    path(
+        "me/followers/",
+        MyFollowerListView.as_view(),
+        name="community-my-follower-list",
+    ),
+    path(
+        "users/<int:user_id>/following/",
+        UserFollowingListView.as_view(),
+        name="community-user-following-list",
+    ),
+    path(
+        "users/<int:user_id>/followers/",
+        UserFollowerListView.as_view(),
+        name="community-user-follower-list",
+    ),
+    path(
+        "me/blocks/",
+        MyBlockListView.as_view(),
+        name="community-my-block-list",
+    ),
+    path(
+        "me/blocks/<int:target_user_id>/",
+        MyBlockToggleView.as_view(),
+        name="community-my-block-toggle",
+    ),
+    path(
+        "me/mutes/",
+        MyMuteListView.as_view(),
+        name="community-my-mute-list",
+    ),
+    path(
+        "me/mutes/<int:target_user_id>/",
+        MyMuteToggleView.as_view(),
+        name="community-my-mute-toggle",
+    ),
+    path(
+        "me/activities/",
+        MyActivityListView.as_view(),
+        name="community-my-activity-list",
+    ),
+    path(
+        "me/feed/",
+        MyFeedView.as_view(),
+        name="community-my-feed",
+    ),
+    path(
+        "users/<int:user_id>/activities/",
+        PublicUserActivityListView.as_view(),
+        name="community-public-user-activity-list",
+    ),
+    path(
+        "reactions/",
+        CommunityReactionToggleView.as_view(),
+        name="community-reaction-toggle",
+    ),
+    path(
+        "bookmarks/",
+        CommunityBookmarkListToggleView.as_view(),
+        name="community-bookmark-list-toggle",
+    ),
+    path(
+        "comments/",
+        CommunityCommentListCreateView.as_view(),
+        name="community-comment-list-create",
+    ),
+    path(
+        "notifications/",
+        MyNotificationListView.as_view(),
+        name="community-my-notification-list",
+    ),
+    path(
+        "notifications/unread-count/",
+        MyNotificationUnreadCountView.as_view(),
+        name="community-my-notification-unread-count",
+    ),
+    path(
+        "notifications/read-all/",
+        MyNotificationReadAllView.as_view(),
+        name="community-my-notification-read-all",
+    ),
+    path(
+        "notifications/<int:notification_id>/read/",
+        MyNotificationReadView.as_view(),
+        name="community-my-notification-read",
+    ),
+    path(
+        "reports/",
+        CommunityReportCreateView.as_view(),
+        name="community-report-create",
+    ),
+    path(
+        "me/reports/",
+        MyCommunityReportListView.as_view(),
+        name="community-my-report-list",
+    ),
+    path(
+        "staff/reports/",
+        StaffCommunityReportListView.as_view(),
+        name="community-staff-report-list",
+    ),
+    path(
+        "staff/reports/<int:report_id>/resolve/",
+        StaffCommunityReportResolveView.as_view(),
+        name="community-staff-report-resolve",
+    ),
+    path(
+        "posts/",
+        CommunityPostListCreateView.as_view(),
+        name="community-post-list-create",
+    ),
+    path(
+        "posts/<int:post_id>/",
+        CommunityPostDetailView.as_view(),
+        name="community-post-detail",
+    ),
+    path(
+        "posts/<int:post_id>/comments/",
+        CommunityPostCommentListCreateView.as_view(),
+        name="community-post-comment-list-create",
+    ),
+]

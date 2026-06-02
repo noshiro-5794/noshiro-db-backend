@@ -3,8 +3,10 @@ from django.urls import path
 from apps.index.api.views.calendar_view import CalendarView
 from apps.index.api.views.subject_section_view import (
     SubjectCharacterListView,
+    SubjectEpisodeDetailView,
     SubjectEpisodeListView,
     SubjectRelationListView,
+    SubjectStaffRoleListView,
     SubjectStaffListView,
 )
 from apps.index.api.views.subject_view import (
@@ -35,9 +37,19 @@ urlpatterns = [
         name="subject-episode-list",
     ),
     path(
+        "subjects/<uuid:subject_id>/episodes/<int:episode_id>/",
+        SubjectEpisodeDetailView.as_view(),
+        name="subject-episode-detail",
+    ),
+    path(
         "subjects/<uuid:subject_id>/staff/",
         SubjectStaffListView.as_view(),
         name="subject-staff-list",
+    ),
+    path(
+        "subjects/<uuid:subject_id>/staff/roles/",
+        SubjectStaffRoleListView.as_view(),
+        name="subject-staff-role-list",
     ),
     path(
         "subjects/<uuid:subject_id>/characters/",

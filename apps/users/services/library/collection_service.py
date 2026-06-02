@@ -6,8 +6,8 @@ from apps.users.exceptions import (
     InvalidUserSubjectIds,
     UserSubjectNotFound,
 )
-from apps.users.selectors.collection_selector import CollectionSelector
-from apps.users.services.social.activity_service import ActivityService
+from apps.users.selectors.library.collection_selector import CollectionSelector
+from apps.community.services.activity_service import ActivityService
 
 
 class CollectionService:
@@ -283,6 +283,50 @@ class CollectionService:
             ],
             ignore_conflicts=True,
         )
+
+        return CollectionSelector.list_collection_items(
+            collection=collection,
+        )
+
+    @staticmethod
+    @transaction.atomic
+    def update_collection_items(
+        *,
+        user,
+        collection_id: int,
+        items,
+    ):
+        collection = CollectionSelector.get_my_collection_or_raise(
+            user=user,
+            collection_id=collection_id,
+        )
+
+        item_ids = [item["id"] for item in items]
+        existing_items = {
+            item.id: item
+            for item in CollectionItem.objects.select_for_update().filter(
+                collection=collection,
+                id__in=item_ids,
+            )
+        }
+
+        if len(existing_items) != len(set(item_ids)):
+            raise CollectionItemNotFound()
+
+        for item_payload in items:
+            item = existing_items[item_payload["id"]]
+            update_fields = []
+
+            if "order" in item_payload:
+                item.order = item_payload["order"]
+                update_fields.append("order")
+
+            if "relation" in item_payload:
+                item.relation = item_payload["relation"]
+                update_fields.append("relation")
+
+            if update_fields:
+                item.save(update_fields=update_fields)
 
         return CollectionSelector.list_collection_items(
             collection=collection,

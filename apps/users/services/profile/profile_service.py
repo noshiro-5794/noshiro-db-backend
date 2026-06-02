@@ -53,6 +53,8 @@ class ProfileService:
         nickname: str = None,
         bio: str = None,
         theme_color: str = None,
+        language: str = None,
+        appearance: str = None,
     ) -> UserProfile:
         profile = cls.get_or_create_profile(user=user)
         changed_fields = []
@@ -63,8 +65,14 @@ class ProfileService:
             profile.bio = bio
             changed_fields.append("bio")
         if theme_color is not None:
-            profile.theme_color = theme_color
+            profile.theme_color = theme_color or "#7F6FB0"
             changed_fields.append("theme_color")
+        if language is not None:
+            profile.language = language
+            changed_fields.append("language")
+        if appearance is not None:
+            profile.appearance = appearance
+            changed_fields.append("appearance")
         if changed_fields:
             profile.save(update_fields=changed_fields)
         return profile

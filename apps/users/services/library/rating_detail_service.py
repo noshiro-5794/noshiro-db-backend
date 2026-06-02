@@ -1,7 +1,7 @@
 from django.db import transaction
 
 from apps.users.models import UserSubjectRatingDetail
-from apps.users.selectors.rating_detail_selector import UserSubjectRatingDetailSelector
+from apps.users.selectors.library.rating_detail_selector import UserSubjectRatingDetailSelector
 
 
 class UserSubjectRatingDetailService:

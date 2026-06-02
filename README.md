@@ -1,16 +1,19 @@
 # Noshiro DB Backend
 
-Noshiro DB Backend is the Django REST backend for an anime and galgame catalog site. It provides public catalog APIs, user library/social APIs, Bangumi data synchronization, avatar storage through MinIO, and staff-only sync operations.
+Noshiro DB Backend is a Django REST backend for an anime and galgame catalog and community product.
+
+It provides catalog search and detail APIs, user account and library APIs, community interaction APIs, Bangumi synchronization, JWT cookie refresh authentication, avatar storage through MinIO, and staff-only sync controls.
 
 ## Status
 
-The current backend is ready for frontend integration:
+The backend is ready for frontend integration.
 
-- User auth, profile, avatar, library, progress, tags, rating details, reviews, collections, follows, activities, and public profile APIs are implemented.
-- Public index APIs for subject search/detail, sections, relations, and daily anime calendar are implemented.
-- Sync APIs and commands support full sync, incremental sync, calendar sync, and single-subject resync.
-- API curl documentation lives in `docs/api/`.
-- Frontend integration guidance lives in `docs/frontend-integration.md`.
+Implemented modules:
+
+- `users`: authentication, profile, settings, avatar upload, personal library, episode progress, tags, rating details, reviews, collections, and public user pages.
+- `community`: posts, comments, follows, activities/feed, reactions, bookmarks, notifications, reports, blocks, and mutes.
+- `index`: subject search, detail, episodes, staff, characters, relations, and daily anime calendar.
+- `sync`: Bangumi provider integration, full sync commands, incremental sync, calendar sync, single-subject resync, Celery tasks, and staff sync APIs.
 
 ## Stack
 
@@ -18,33 +21,35 @@ The current backend is ready for frontend integration:
 - Django 5.2
 - Django REST Framework
 - PostgreSQL
+- Redis
 - Celery / Celery Beat
 - MinIO
 - SimpleJWT
 
-## Project Structure
+## Structure
 
 ```text
 apps/
-  core/    shared API response, pagination, exceptions, handlers
-  index/   public catalog models, selectors, serializers, views
-  users/   auth, profile, user library, social features
-  sync/    Bangumi providers, sync services, Celery tasks, admin sync APIs
+  core/       shared response envelope, pagination, exceptions, handlers
+  users/      accounts, profiles, user library, reviews, collections
+  community/  social graph, activities, posts, comments, interactions
+  index/      public catalog models and APIs
+  sync/       Bangumi providers, sync services, management commands, tasks
 config/
-  settings/ split Django settings
+  settings/   split Django settings
 docs/
-  api/ frontend-facing curl API docs
-  frontend-integration.md
+  api/        frontend-facing API documentation
 ```
 
-Main layering convention:
+Layering convention:
 
 ```text
-api/views        HTTP boundary only
-api/serializers  request validation and response shape
-selectors        read/query logic
-services         write/business/sync logic
-tasks            Celery task wrappers
+api/views         HTTP boundary only
+api/serializers   request validation and response shape
+selectors         read/query logic
+services          write/business logic
+tasks             Celery task wrappers
+providers         external service clients
 ```
 
 ## Local Setup
@@ -62,13 +67,11 @@ Install dependencies:
 pip install -r requirements.txt
 ```
 
-Create your local environment file:
+Create `.env`:
 
 ```bash
 cp .env.example .env
 ```
-
-Then edit `.env` with your local PostgreSQL, Redis, MinIO, Bangumi, email, and production domain settings.
 
 Run migrations:
 
@@ -82,144 +85,64 @@ Start the API server:
 ./venv/bin/python manage.py runserver 0.0.0.0:8008
 ```
 
-Run checks:
+## Runtime Processes
+
+For local development, run the processes you need in separate terminals or tmux panes.
+
+API:
+
+```bash
+./venv/bin/python manage.py runserver 0.0.0.0:8008
+```
+
+Celery worker:
+
+```bash
+celery -A config worker -l info
+```
+
+Celery Beat:
+
+```bash
+celery -A config beat -l info
+```
+
+Beat enables scheduled jobs. Stop Beat before running large manual full sync operations if you want to avoid overlap with scheduled sync.
+
+Default scheduled jobs:
+
+```text
+03:30 daily calendar sync
+04:00 daily incremental sync
+```
+
+## Verification
+
+Run:
 
 ```bash
 ./venv/bin/python manage.py check
 ./venv/bin/python manage.py makemigrations --check --dry-run
 ```
 
-## Environment
+Compile changed apps when needed:
 
-Important environment variables:
-
-```text
-DJANGO_SECRET_KEY
-DJANGO_DEBUG
-DJANGO_ALLOWED_HOSTS
-
-DATABASE_URL
-
-CORS_ALLOWED_ORIGINS
-CORS_ALLOW_CREDENTIALS
-CSRF_TRUSTED_ORIGINS
-
-JWT_REFRESH_COOKIE_SECURE
-JWT_REFRESH_COOKIE_SAMESITE
-
-MINIO_ENDPOINT
-MINIO_ACCESS_KEY
-MINIO_SECRET_KEY
-MINIO_BUCKET
-MINIO_PUBLIC_URL
-
-BANGUMI_API_BASE_URL
-BANGUMI_API_KEY
-BANGUMI_USER_AGENT
-BANGUMI_TIMEOUT
-
-SYNC_INCREMENTAL_SUBJECT_BATCH_SIZE
-SYNC_CALENDAR_CRON_HOUR
-SYNC_CALENDAR_CRON_MINUTE
-SYNC_INCREMENTAL_CRON_HOUR
-SYNC_INCREMENTAL_CRON_MINUTE
-
-CELERY_BROKER_URL
-CELERY_RESULT_BACKEND
-
-RESEND_API_KEY
-EMAIL_FROM
+```bash
+./venv/bin/python -m compileall apps
 ```
 
-Production notes:
+## Documentation
 
-- Set `DJANGO_DEBUG=False`.
-- Set explicit `DJANGO_ALLOWED_HOSTS`.
-- Set explicit `CORS_ALLOWED_ORIGINS`.
-- Use `CORS_ALLOW_CREDENTIALS=True` when the frontend uses refresh-cookie auth.
-- Keep refresh tokens in HttpOnly cookies, not localStorage.
-
-## API Documentation
-
-Start here:
+Start with:
 
 ```text
+docs/README.md
 docs/api/README.md
 ```
 
-Main groups:
+The API documentation is written for frontend implementation and includes endpoint groups, response conventions, authentication behavior, and curl examples.
 
-- `docs/api/users-auth.md`
-- `docs/api/users-profile.md`
-- `docs/api/users-subjects.md`
-- `docs/api/index.md`
-- `docs/api/sync.md`
-
-Frontend handoff:
-
-```text
-docs/frontend-integration.md
-```
-
-## Frontend Auth Summary
-
-Login/register returns an access token:
-
-```json
-{
-  "access": "access_token_here"
-}
-```
-
-Authenticated requests use:
-
-```http
-Authorization: Bearer access_token_here
-```
-
-Refresh token is stored in an HttpOnly cookie named `noshiro_refresh`.
-Frontend refresh requests must include credentials:
-
-```js
-await fetch(`${baseUrl}/api/users/token/refresh/`, {
-  method: "POST",
-  credentials: "include",
-});
-```
-
-Use `GET /api/users/me/profile/` after login/refresh. It returns `is_staff`, which the frontend can use to hide admin-only sync controls.
-
-## Core Frontend Flows
-
-Search/list:
-
-```text
-GET /api/index/subjects/?keyword={query}&page=1&page_size=16
-```
-
-Subject detail:
-
-```text
-GET /api/index/subjects/{subject_id}/
-GET /api/index/subjects/{subject_id}/episodes/
-GET /api/index/subjects/{subject_id}/staff/
-GET /api/index/subjects/{subject_id}/characters/
-GET /api/index/subjects/{subject_id}/relations/
-```
-
-Authenticated subject context:
-
-```text
-GET /api/users/me/subjects/{subject_id}/context/
-```
-
-Daily broadcast calendar:
-
-```text
-GET /api/index/calendar/
-```
-
-## Sync
+## Sync Commands
 
 Full sync:
 
@@ -227,7 +150,7 @@ Full sync:
 ./venv/bin/python manage.py full_sync
 ```
 
-Single subject resync:
+Single subject sync:
 
 ```bash
 ./venv/bin/python manage.py sync_subject --uuid "$SUBJECT_ID"
@@ -247,54 +170,6 @@ Calendar sync:
 ```bash
 ./venv/bin/python manage.py sync_calendar
 ./venv/bin/python manage.py sync_calendar --skip-subject-details
-```
-
-## Celery
-
-Run worker:
-
-```bash
-celery -A config worker -l info
-```
-
-Run beat:
-
-```bash
-celery -A config beat -l info
-```
-
-Default schedules:
-
-```text
-03:30 daily calendar sync
-04:00 daily incremental sync
-```
-
-Relevant schedule env vars:
-
-```text
-SYNC_CALENDAR_CRON_HOUR
-SYNC_CALENDAR_CRON_MINUTE
-SYNC_INCREMENTAL_CRON_HOUR
-SYNC_INCREMENTAL_CRON_MINUTE
-SYNC_INCREMENTAL_SUBJECT_BATCH_SIZE
-SYNC_INCREMENTAL_MAX_CONSECUTIVE_ERRORS
-SYNC_INCREMENTAL_MAX_CONSECUTIVE_SKIPS
-```
-
-## Verification
-
-Before handing changes to the frontend or deploying:
-
-```bash
-./venv/bin/python manage.py check
-./venv/bin/python manage.py makemigrations --check --dry-run
-```
-
-Then run the key smoke tests in:
-
-```text
-docs/api/README.md
 ```
 
 ## License

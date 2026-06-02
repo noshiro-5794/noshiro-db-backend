@@ -2,196 +2,93 @@
 
 Run the common setup in [README](./README.md), then login with [Auth](./users-auth.md) to set `ACCESS_TOKEN`.
 
-Only `anime` and `galgame` subjects can be marked. Other subject types may exist in the database and may appear as related subjects on index detail pages, but they are not user-markable in this product.
+`UserSubject` is the current user's mark record for an anime or galgame subject.
 
 ## List My Subjects
 
-Unauthenticated request, expected to fail:
-
 ```bash
-curl -s -X GET "$BASE_URL/api/users/me/subjects/" | jq
-```
-
-Authenticated request:
-
-```bash
-curl -s -X GET "$BASE_URL/api/users/me/subjects/" \
+curl -s -X GET "$BASE_URL/api/users/me/subjects/?page=1&page_size=16" \
   -H "Authorization: Bearer $ACCESS_TOKEN" | jq
 ```
 
-Filter by status:
+Filters:
 
-```bash
-curl -s -X GET "$BASE_URL/api/users/me/subjects/?status=done" \
-  -H "Authorization: Bearer $ACCESS_TOKEN" | jq
+```text
+status=doing|wish|done|on_hold|drop
+subject_type=anime|galgame
+keyword=...
+ordering=-updated_at
 ```
 
-## Create My Subject
+## Create Or Update Subject Mark
 
 ```bash
+SUBJECT_ID="2241e7a8-f492-4337-b601-507a09cc5eee"
+
 curl -s -X POST "$BASE_URL/api/users/me/subjects/" \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "subject_id": "00001a56-b41f-4376-91db-1e10c65794bb",
-    "status": "done",
+    "subject_id": "'"$SUBJECT_ID"'",
+    "status": "doing",
     "simple_rating": 4,
-    "rating": "8.5",
-    "comment": "This is a comment.",
-    "watch_start_date": "2024-01-01",
-    "watch_end_date": "2024-01-10",
+    "rating": "8.0",
+    "comment": "Watching.",
     "is_public": true
   }' | jq
 ```
 
-Unsupported subject type, expected to fail. Replace this value with an existing non-anime/non-galgame subject ID:
+The endpoint is idempotent for the same user and subject.
+
+## Get Mark Detail
 
 ```bash
-NON_PRIMARY_SUBJECT_ID="00000000-0000-0000-0000-000000000000"
+USER_SUBJECT_ID=1
 
-curl -s -X POST "$BASE_URL/api/users/me/subjects/" \
-  -H "Authorization: Bearer $ACCESS_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d "{
-    \"subject_id\": \"$NON_PRIMARY_SUBJECT_ID\",
-    \"status\": \"done\"
-  }" | jq
-```
-
-Expected business error for an existing non-anime/non-galgame subject:
-
-```json
-{
-  "code": 21001,
-  "message": "subject type not supported",
-  "data": null
-}
-```
-
-## Get My Subject
-
-```bash
-curl -s -X GET "$BASE_URL/api/users/me/subjects/1/" \
+curl -s -X GET "$BASE_URL/api/users/me/subjects/$USER_SUBJECT_ID/" \
   -H "Authorization: Bearer $ACCESS_TOKEN" | jq
 ```
 
-## Get My Context For A Subject
-
-Use this endpoint on a subject detail page after login. It returns the current user's mark state, tags, rating details, reviews, and progress summary for a global `subject_id`.
+## Update Mark Detail
 
 ```bash
-SUBJECT_ID="000212ed-b7b4-45c1-8d0d-7cd72906baa4"
+curl -s -X PATCH "$BASE_URL/api/users/me/subjects/$USER_SUBJECT_ID/" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "status": "done",
+    "rating": "8.5",
+    "comment": "Finished."
+  }' | jq
+```
 
+## Delete Mark
+
+```bash
+curl -s -X DELETE "$BASE_URL/api/users/me/subjects/$USER_SUBJECT_ID/" \
+  -H "Authorization: Bearer $ACCESS_TOKEN"
+```
+
+Returns `204 No Content`.
+
+## Subject Context
+
+Use this endpoint on authenticated subject detail pages:
+
+```bash
 curl -s -X GET "$BASE_URL/api/users/me/subjects/$SUBJECT_ID/context/" \
   -H "Authorization: Bearer $ACCESS_TOKEN" | jq
 ```
 
-Unmarked response shape:
+It returns:
 
-```json
-{
-  "code": 0,
-  "message": "",
-  "data": {
-    "is_marked": false,
-    "user_subject": null,
-    "tags": [],
-    "rating_details": [],
-    "reviews": [],
-    "progress": {
-      "finished_count": 0,
-      "finished_episode_ids": []
-    }
-  }
-}
+```text
+is_marked
+user_subject
+tags
+rating_details
+reviews
+progress.finished_episode_ids
 ```
 
-Marked response shape:
-
-```json
-{
-  "code": 0,
-  "message": "",
-  "data": {
-    "is_marked": true,
-    "user_subject": {
-      "id": 1,
-      "status": "doing",
-      "simple_rating": 4,
-      "rating": "8.5",
-      "comment": "",
-      "watch_start_date": "",
-      "watch_end_date": "",
-      "is_public": true,
-      "subject": {
-        "id": "000212ed-b7b4-45c1-8d0d-7cd72906baa4",
-        "title": "title"
-      }
-    },
-    "tags": [],
-    "rating_details": [],
-    "reviews": [],
-    "progress": {
-      "finished_count": 0,
-      "finished_episode_ids": []
-    }
-  }
-}
-```
-
-Frontend detail-page flow:
-
-```js
-const context = await fetch(`${baseUrl}/api/users/me/subjects/${subjectId}/context/`, {
-  headers: {
-    Authorization: `Bearer ${accessToken}`,
-  },
-}).then((response) => response.json());
-
-if (!context.data.is_marked) {
-  // Show "mark this subject" controls first.
-} else {
-  // Show my status, tags, rating details, reviews, and progress.
-}
-```
-
-`user_subject.id` is still returned for backward compatibility with older nested APIs, but new subject detail pages should prefer subject-scoped APIs such as this context endpoint.
-
-## Update My Subject
-
-```bash
-curl -s -X PATCH "$BASE_URL/api/users/me/subjects/1/" \
-  -H "Authorization: Bearer $ACCESS_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "simple_rating": 5,
-    "rating": "9.0",
-    "comment": "updated comment",
-    "is_public": false
-  }' | jq
-```
-
-Invalid rating example, expected to fail:
-
-```bash
-curl -s -X PATCH "$BASE_URL/api/users/me/subjects/1/" \
-  -H "Authorization: Bearer $ACCESS_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "simple_rating": 6
-  }' | jq
-```
-
-## Delete My Subject
-
-```bash
-curl -s -X DELETE "$BASE_URL/api/users/me/subjects/1/" \
-  -H "Authorization: Bearer $ACCESS_TOKEN" | jq
-```
-
-Get deleted subject, expected to fail:
-
-```bash
-curl -s -X GET "$BASE_URL/api/users/me/subjects/1/" \
-  -H "Authorization: Bearer $ACCESS_TOKEN" | jq
-```
+Frontend subject pages should prefer this subject UUID flow.

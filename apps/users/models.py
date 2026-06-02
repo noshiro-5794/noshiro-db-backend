@@ -51,13 +51,34 @@ class User(AbstractUser):
 
 class UserProfile(models.Model):
 
+    class Language(models.TextChoices):
+        AUTO = "auto", "Auto"
+        EN_US = "en-US", "English"
+        ZH_CN = "zh-CN", "Chinese"
+        JA_JP = "ja-JP", "Japanese"
+
+    class Appearance(models.TextChoices):
+        AUTO = "auto", "Auto"
+        LIGHT = "light", "Light"
+        DARK = "dark", "Dark"
+
     user = models.OneToOneField(
         "users.User", on_delete=models.CASCADE, related_name="profile"
     )
     nickname = models.CharField(max_length=256, unique=True)
     avatar = models.URLField(max_length=1024, blank=True)
     bio = models.TextField(blank=True)
-    theme_color = models.CharField(max_length=16, blank=True)
+    language = models.CharField(
+        max_length=16,
+        choices=Language.choices,
+        default=Language.AUTO,
+    )
+    appearance = models.CharField(
+        max_length=16,
+        choices=Appearance.choices,
+        default=Appearance.AUTO,
+    )
+    theme_color = models.CharField(max_length=16, default="#7F6FB0")
 
     class Meta:
         db_table = "user_profile"
@@ -67,38 +88,6 @@ class UserProfile(models.Model):
 
     def __str__(self):
         return self.nickname
-
-
-class UserFollow(models.Model):
-
-    follower = models.ForeignKey(
-        "users.User", on_delete=models.CASCADE, related_name="following_relations"
-    )
-    following = models.ForeignKey(
-        "users.User", on_delete=models.CASCADE, related_name="follower_relations"
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        db_table = "user_follow"
-        constraints = [
-            models.UniqueConstraint(fields=["follower", "following"], name="uq_follow"),
-            models.CheckConstraint(
-                condition=~Q(follower=models.F("following")),
-                name="ck_no_self_follow",
-            ),
-        ]
-        indexes = [
-            models.Index(
-                fields=["follower", "-created_at"], name="idx_uf_follower_created"
-            ),
-            models.Index(
-                fields=["following", "-created_at"], name="idx_uf_following_created"
-            ),
-        ]
-
-    def __str__(self):
-        return f"{self.follower} - {self.following}"
 
 
 class EmailVerification(models.Model):
@@ -285,11 +274,13 @@ class Review(models.Model):
     is_public = models.BooleanField(default=True)
     is_spoiler = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = "review"
         indexes = [
             models.Index(fields=["-created_at"], name="idx_review_created"),
+            models.Index(fields=["-updated_at"], name="idx_review_updated"),
         ]
 
     def __str__(self):
@@ -352,82 +343,3 @@ class CollectionItem(models.Model):
             f"{self.collection} - {self.user_subject.subject.title} ({self.relation})"
         )
 
-
-class Activity(models.Model):
-
-    class ActivityType(models.TextChoices):
-        USER_SUBJECT_CREATED    = "user_subject_created", "User subject created"
-        USER_SUBJECT_UPDATED    = "user_subject_updated", "User subject updated"
-        REVIEW_CREATED          = "review_created", "Review created"
-        COLLECTION_CREATED      = "collection_created", "Collection created"
-        COLLECTION_ITEM_ADDED   = "collection_item_added", "Collection item added"
-        USER_FOLLOWED           = "user_followed", "User followed"
-
-    user = models.ForeignKey(
-        "users.User",
-        on_delete=models.CASCADE,
-        related_name="activities",
-    )
-
-    user_subject = models.ForeignKey(
-        "users.UserSubject",
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name="activities",
-    )
-
-    review = models.ForeignKey(
-        "users.Review",
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name="activities",
-    )
-
-    collection = models.ForeignKey(
-        "users.Collection",
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name="activities",
-    )
-
-    collection_item = models.ForeignKey(
-        "users.CollectionItem",
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name="activities",
-    )
-
-    target_user = models.ForeignKey(
-        "users.User",
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name="targeted_activities",
-    )
-
-    activity_type = models.CharField(max_length=64, choices=ActivityType.choices)
-    message = models.CharField(max_length=1024, blank=True)
-    metadata = models.JSONField(default=dict, blank=True)
-    is_public = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        db_table = "activity"
-        indexes = [
-            models.Index(
-                fields=["user", "-created_at"], name="idx_activity_user_created"
-            ),
-            models.Index(
-                fields=["activity_type", "-created_at"], name="idx_activity_type_created"
-            ),
-            models.Index(
-                fields=["is_public", "-created_at"], name="idx_activity_public_created"
-            ),
-        ]
-
-    def __str__(self):
-        return f"{self.user_id} - {self.activity_type}"

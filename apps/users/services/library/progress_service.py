@@ -4,7 +4,7 @@ from apps.index.models import Subject, Episode
 from apps.index.exceptions import SubjectNotFound, InvalidEpisodeIds
 from apps.users.exceptions import UserSubjectNotFound
 from apps.users.models import UserSubject, UserEpisodeProgress
-from apps.users.selectors.progress_selector import EpisodeProgressSelector
+from apps.users.selectors.library.progress_selector import EpisodeProgressSelector
 
 
 class EpisodeProgressService:
@@ -35,6 +35,7 @@ class EpisodeProgressService:
             Episode.objects.filter(
                 id__in=episode_ids,
                 subject=subject,
+                type="EP",
             ).values_list("id", flat=True)
         )
 

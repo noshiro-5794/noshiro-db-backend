@@ -2,7 +2,7 @@ from django.db import transaction, IntegrityError
 
 from apps.users.models import UserTag, UserSubjectTag
 from apps.users.exceptions import TagNotFound, TagAlreadyExists, InvalidTagIds
-from apps.users.selectors.tag_selector import UserTagSelector
+from apps.users.selectors.library.tag_selector import UserTagSelector
 
 
 class UserTagService:

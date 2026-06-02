@@ -49,18 +49,6 @@ class UserNotFound(UserException):
     default_detail = "user not found"
 
 
-class CannotFollowSelf(UserException):
-
-    default_code = 11202
-    default_detail = "can not follow yourself"
-
-
-class FollowRelationNotFound(UserException):
-
-    default_code = 11203
-    default_detail = "follow relation not found"
-
-
 class AvatarUploadFailed(UserException):
 
     default_code = 12000

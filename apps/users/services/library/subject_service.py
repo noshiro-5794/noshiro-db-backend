@@ -5,8 +5,8 @@ from apps.index.exceptions import SubjectNotFound, SubjectTypeNotSupported
 from apps.index.models import Subject
 from apps.users.models import UserSubject
 from apps.users.exceptions import UserSubjectNotFound
-from apps.users.selectors.subject_selector import SubjectSelector
-from apps.users.services.social.activity_service import ActivityService
+from apps.users.selectors.library.subject_selector import SubjectSelector
+from apps.community.services.activity_service import ActivityService
 
 
 class UserSubjectService:

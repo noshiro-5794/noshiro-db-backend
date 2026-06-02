@@ -1,141 +1,114 @@
-# Auth API
+# Users Auth API
 
-Run the common setup in [README](./README.md) first.
+Run the common setup in [README](./README.md).
 
 ## Send Verification Code
 
-Register:
-
 ```bash
 curl -s -X POST "$BASE_URL/api/users/send-code/" \
   -H "Content-Type: application/json" \
-  -d "{
-    \"email\": \"$EMAIL\",
-    \"purpose\": \"register\"
-  }" | jq
+  -d '{
+    "email": "'"$EMAIL"'",
+    "purpose": "register"
+  }' | jq
 ```
 
-Login:
+Supported `purpose` values:
 
-```bash
-curl -s -X POST "$BASE_URL/api/users/send-code/" \
-  -H "Content-Type: application/json" \
-  -d "{
-    \"email\": \"$EMAIL\",
-    \"purpose\": \"login\"
-  }" | jq
-```
-
-Reset password:
-
-```bash
-curl -s -X POST "$BASE_URL/api/users/send-code/" \
-  -H "Content-Type: application/json" \
-  -d "{
-    \"email\": \"$EMAIL\",
-    \"purpose\": \"reset_password\"
-  }" | jq
+```text
+register
+login
+reset_password
 ```
 
 ## Register
 
-Replace `123456` with the real email code.
-
 ```bash
-ACCESS_TOKEN=$(
-  curl -s -c "$COOKIE_JAR" -X POST "$BASE_URL/api/users/register/" \
-    -H "Content-Type: application/json" \
-    -d "{
-      \"email\": \"$EMAIL\",
-      \"password\": \"$PASSWORD\",
-      \"nickname\": \"harry\",
-      \"code\": \"123456\"
-    }" | tee /tmp/noshiro_register_response.json | jq -r ".data.access // empty"
-)
-
-cat /tmp/noshiro_register_response.json | jq
-echo "$ACCESS_TOKEN"
-cat "$COOKIE_JAR"
+curl -s -X POST "$BASE_URL/api/users/register/" \
+  -H "Content-Type: application/json" \
+  -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
+  -d '{
+    "email": "'"$EMAIL"'",
+    "password": "'"$PASSWORD"'",
+    "code": "123456",
+    "nickname": "noshiro"
+  }' | jq
 ```
+
+Response:
+
+```json
+{
+  "code": 0,
+  "message": "",
+  "data": {
+    "access": "access_token"
+  }
+}
+```
+
+The refresh token is set as an HttpOnly cookie.
 
 ## Password Login
 
-Login returns an access token in JSON and sets the refresh token in an HttpOnly cookie.
-
 ```bash
-ACCESS_TOKEN=$(
-  curl -s -c "$COOKIE_JAR" -X POST "$BASE_URL/api/users/login/password/" \
-    -H "Content-Type: application/json" \
-    -d "{
-      \"email\": \"$EMAIL\",
-      \"password\": \"$PASSWORD\"
-    }" | tee /tmp/noshiro_login_response.json | jq -r ".data.access"
-)
-
-cat /tmp/noshiro_login_response.json | jq
-echo "$ACCESS_TOKEN"
-cat "$COOKIE_JAR"
+curl -s -X POST "$BASE_URL/api/users/login/password/" \
+  -H "Content-Type: application/json" \
+  -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
+  -d '{
+    "email": "'"$EMAIL"'",
+    "password": "'"$PASSWORD"'"
+  }' | jq
 ```
 
-## Email Code Login
-
-Replace `654321` with the real email code.
+## Code Login
 
 ```bash
-ACCESS_TOKEN=$(
-  curl -s -c "$COOKIE_JAR" -X POST "$BASE_URL/api/users/login/code/" \
-    -H "Content-Type: application/json" \
-    -d "{
-      \"email\": \"$EMAIL\",
-      \"code\": \"654321\"
-    }" | tee /tmp/noshiro_code_login_response.json | jq -r ".data.access // empty"
-)
-
-cat /tmp/noshiro_code_login_response.json | jq
-echo "$ACCESS_TOKEN"
-cat "$COOKIE_JAR"
+curl -s -X POST "$BASE_URL/api/users/login/code/" \
+  -H "Content-Type: application/json" \
+  -b "$COOKIE_JAR" -c "$COOKIE_JAR" \
+  -d '{
+    "email": "'"$EMAIL"'",
+    "code": "123456"
+  }' | jq
 ```
 
 ## Refresh Access Token
 
-No refresh token is sent in the request body. The backend reads the HttpOnly refresh cookie.
-
 ```bash
-ACCESS_TOKEN=$(
-  curl -s -b "$COOKIE_JAR" -c "$COOKIE_JAR" -X POST "$BASE_URL/api/users/token/refresh/" \
-    | tee /tmp/noshiro_refresh_response.json | jq -r ".data.access // empty"
-)
+curl -s -X POST "$BASE_URL/api/users/token/refresh/" \
+  -b "$COOKIE_JAR" -c "$COOKIE_JAR" | jq
+```
 
-cat /tmp/noshiro_refresh_response.json | jq
-echo "$ACCESS_TOKEN"
-cat "$COOKIE_JAR"
+Frontend requests must use:
+
+```js
+credentials: "include"
 ```
 
 ## Logout
 
-Logout blacklists the current refresh token and clears the refresh cookie.
-
 ```bash
-curl -s -b "$COOKIE_JAR" -c "$COOKIE_JAR" -X POST "$BASE_URL/api/users/logout/" | jq
-cat "$COOKIE_JAR"
-```
-
-Refresh after logout should fail:
-
-```bash
-curl -s -b "$COOKIE_JAR" -c "$COOKIE_JAR" -X POST "$BASE_URL/api/users/token/refresh/" | jq
+curl -s -X POST "$BASE_URL/api/users/logout/" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -b "$COOKIE_JAR" -c "$COOKIE_JAR" | jq
 ```
 
 ## Reset Password
 
-Replace `987654` with the real email code.
-
 ```bash
 curl -s -X POST "$BASE_URL/api/users/password/reset/" \
   -H "Content-Type: application/json" \
-  -d "{
-    \"email\": \"$EMAIL\",
-    \"code\": \"987654\",
-    \"new_password\": \"$NEW_PASSWORD\"
-  }" | jq
+  -d '{
+    "email": "'"$EMAIL"'",
+    "code": "123456",
+    "new_password": "'"$NEW_PASSWORD"'"
+  }' | jq
 ```
+
+## Frontend Notes
+
+- Keep the access token in app memory.
+- Keep the refresh token in the HttpOnly cookie.
+- On app boot, call refresh; if it fails, show logged-out UI.
+- After login or refresh, call `GET /api/users/me/profile/`.

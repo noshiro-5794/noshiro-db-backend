@@ -1,23 +1,28 @@
-# Profile API
+# Users Profile API
 
 Run the common setup in [README](./README.md), then login with [Auth](./users-auth.md) to set `ACCESS_TOKEN`.
 
 ## Get My Profile
-
-Unauthenticated request, expected to fail:
-
-```bash
-curl -s -X GET "$BASE_URL/api/users/me/profile/" | jq
-```
-
-Authenticated request:
 
 ```bash
 curl -s -X GET "$BASE_URL/api/users/me/profile/" \
   -H "Authorization: Bearer $ACCESS_TOKEN" | jq
 ```
 
-The response includes `is_staff` and `is_superuser`, which the frontend can use to hide admin-only actions such as manual sync.
+Important fields:
+
+```text
+user_id
+email
+is_staff
+is_superuser
+nickname
+bio
+avatar
+language
+appearance
+theme_color
+```
 
 ## Update My Profile
 
@@ -26,19 +31,54 @@ curl -s -X PATCH "$BASE_URL/api/users/me/profile/" \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "nickname": "JRH",
-    "bio": "my bio",
+    "nickname": "noshiro",
+    "bio": "Anime and galgame notes.",
     "theme_color": "#66ccff"
   }' | jq
 ```
 
-Empty body, expected to fail validation:
+## Get Settings
 
 ```bash
-curl -s -X PATCH "$BASE_URL/api/users/me/profile/" \
+curl -s -X GET "$BASE_URL/api/users/me/settings/" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" | jq
+```
+
+## Update Settings
+
+```bash
+curl -s -X PATCH "$BASE_URL/api/users/me/settings/" \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{}' | jq
+  -d '{
+    "language": "zh-CN",
+    "appearance": "auto",
+    "theme_color": "#66ccff"
+  }' | jq
+```
+
+Supported `language` values:
+
+```text
+auto
+en-US
+zh-CN
+ja-JP
+```
+
+Supported `appearance` values:
+
+```text
+auto
+light
+dark
+```
+
+## Profile Stats
+
+```bash
+curl -s -X GET "$BASE_URL/api/users/me/profile/stats/?year=2026&timezone=Asia/Shanghai" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" | jq
 ```
 
 ## Upload Avatar
@@ -49,8 +89,4 @@ curl -s -X POST "$BASE_URL/api/users/me/avatar/" \
   -F "avatar=@avatar.jpg" | jq
 ```
 
-The returned URL uses the public MinIO domain:
-
-```text
-https://avatar.noshiro.moe/noshiro-avatars/avatars/{user_id}/{uuid}.jpg
-```
+The backend validates content type and max file size, then stores the original image in MinIO.

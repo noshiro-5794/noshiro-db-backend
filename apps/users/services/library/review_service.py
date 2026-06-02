@@ -1,8 +1,8 @@
 from django.db import transaction
 
 from apps.users.models import Review
-from apps.users.selectors.review_selector import ReviewSelector
-from apps.users.services.social.activity_service import ActivityService
+from apps.users.selectors.library.review_selector import ReviewSelector
+from apps.community.services.activity_service import ActivityService
 
 
 class ReviewService:
@@ -113,6 +113,7 @@ class ReviewService:
             update_fields.append(key)
 
         if update_fields:
+            update_fields.append("updated_at")
             review.save(update_fields=update_fields)
 
         return review
