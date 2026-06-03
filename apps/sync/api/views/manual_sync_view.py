@@ -4,6 +4,8 @@ from rest_framework.views import APIView
 
 from apps.core.response import success_response
 from apps.sync.api.serializers.manual_sync_serializer import (
+    BangumiSubjectSyncQueuedResponseSerializer,
+    BangumiSubjectSyncRequestSerializer,
     CalendarSyncRequestSerializer,
     CalendarSyncResultResponseSerializer,
     IncrementalSyncQueuedResponseSerializer,
@@ -20,7 +22,43 @@ from apps.sync.services.incremental_sync_service import incremental_sync_service
 from apps.sync.services.manual_sync_service import manual_subject_sync_service
 from apps.sync.tasks.calendar import sync_calendar_task
 from apps.sync.tasks.incremental import run_incremental_sync_task
-from apps.sync.tasks.manual import sync_subject_by_uuid_task
+from apps.sync.tasks.manual import sync_subject_by_bangumi_id_task, sync_subject_by_uuid_task
+
+
+class BangumiSubjectSyncView(APIView):
+
+    permission_classes = [IsAdminUser]
+
+    def post(self, request):
+        serializer = BangumiSubjectSyncRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        bangumi_id = serializer.validated_data["bangumi_id"]
+        run_async = serializer.validated_data["run_async"]
+
+        if run_async:
+            try:
+                task = sync_subject_by_bangumi_id_task.delay(bangumi_id)
+            except Exception as exc:
+                raise SyncTaskDispatchFailed() from exc
+
+            output_serializer = BangumiSubjectSyncQueuedResponseSerializer(
+                {
+                    "task_id": task.id,
+                    "status": "queued",
+                    "bangumi_id": bangumi_id,
+                }
+            )
+            return success_response(
+                data=output_serializer.data,
+                status_code=status.HTTP_202_ACCEPTED,
+            )
+
+        result = manual_subject_sync_service.sync_by_bangumi_id(
+            bangumi_id=bangumi_id,
+        )
+        output_serializer = SubjectResyncResultResponseSerializer(result)
+        return success_response(data=output_serializer.data)
 
 
 class SubjectResyncView(APIView):

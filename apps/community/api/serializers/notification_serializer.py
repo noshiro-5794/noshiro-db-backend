@@ -48,14 +48,78 @@ class NotificationResponseSerializer(serializers.ModelSerializer):
             return None
         return NotificationActorResponseSerializer(obj.actor).data
 
+    def _user_summary(self, user):
+        if not user:
+            return None
+        return NotificationActorResponseSerializer(user).data
+
+    def _target_base(self, target_type, target_id):
+        return {
+            "type": target_type,
+            "id": target_id,
+        }
+
+    def _post_target(self, post):
+        data = self._target_base("post", post.id)
+        data["author"] = self._user_summary(post.author)
+        return data
+
+    def _review_target(self, review):
+        data = self._target_base("review", review.id)
+        user_subject = getattr(review, "user_subject", None)
+        data["author"] = self._user_summary(getattr(user_subject, "user", None))
+        return data
+
+    def _collection_target(self, collection):
+        data = self._target_base("collection", collection.id)
+        data["owner"] = self._user_summary(collection.user)
+        return data
+
+    def _activity_target(self, activity):
+        data = self._target_base("activity", activity.id)
+        data["user"] = self._user_summary(activity.user)
+        data["target_user"] = self._user_summary(activity.target_user)
+
+        if activity.post_id:
+            data["post"] = self._post_target(activity.post)
+        if activity.review_id:
+            data["review"] = self._review_target(activity.review)
+        if activity.collection_id:
+            data["collection"] = self._collection_target(activity.collection)
+        if activity.subject_id:
+            data["subject"] = {"id": str(activity.subject_id)}
+        if activity.comment_id:
+            data["comment"] = self._comment_target(activity.comment)
+
+        return data
+
+    def _comment_target(self, comment):
+        data = self._target_base("comment", comment.id)
+        data["author"] = self._user_summary(comment.author)
+        data["parent_id"] = comment.parent_id
+
+        if comment.post_id:
+            data["post"] = self._post_target(comment.post)
+        if comment.review_id:
+            data["review"] = self._review_target(comment.review)
+        if comment.collection_id:
+            data["collection"] = self._collection_target(comment.collection)
+        if comment.activity_id:
+            data["activity"] = self._activity_target(comment.activity)
+
+        return data
+
     def get_target(self, obj):
-        for target_type in ["activity", "post", "comment", "review", "collection"]:
-            target_id = getattr(obj, f"{target_type}_id", None)
-            if target_id:
-                return {
-                    "type": target_type,
-                    "id": target_id,
-                }
+        if obj.activity_id:
+            return self._activity_target(obj.activity)
+        if obj.post_id:
+            return self._post_target(obj.post)
+        if obj.comment_id:
+            return self._comment_target(obj.comment)
+        if obj.review_id:
+            return self._review_target(obj.review)
+        if obj.collection_id:
+            return self._collection_target(obj.collection)
         return None
 
     def get_is_read(self, obj):

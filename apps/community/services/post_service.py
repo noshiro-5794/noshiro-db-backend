@@ -1,6 +1,11 @@
 from django.db import transaction
 from django.utils import timezone
 
+from apps.community.exceptions import (
+    CommunityPermissionDenied,
+    CommunityPostNotFound,
+    CommunityTargetLocked,
+)
 from apps.community.models import Activity, CommunityPost, FeedPolicy, Visibility
 
 
@@ -50,4 +55,68 @@ class CommunityPostService:
                 }
             },
         )
+        return post
+
+    @staticmethod
+    def _get_my_post_or_raise(*, author, post_id: int):
+        post = CommunityPost.objects.filter(id=post_id).first()
+        if not post:
+            raise CommunityPostNotFound()
+        if post.author_id != author.id:
+            raise CommunityPermissionDenied()
+        return post
+
+    @staticmethod
+    @transaction.atomic
+    def update_post(*, author, post_id: int, **fields):
+        post = CommunityPostService._get_my_post_or_raise(
+            author=author,
+            post_id=post_id,
+        )
+        if post.is_locked or post.feed_policy == FeedPolicy.HIDDEN:
+            raise CommunityTargetLocked()
+
+        allowed_fields = {
+            "content",
+            "visibility",
+            "is_spoiler",
+            "is_nsfw",
+        }
+        update_fields = []
+        for key, value in fields.items():
+            if key not in allowed_fields:
+                continue
+            setattr(post, key, value)
+            update_fields.append(key)
+
+        if update_fields:
+            update_fields.append("updated_at")
+            post.save(update_fields=update_fields)
+
+        return post
+
+    @staticmethod
+    @transaction.atomic
+    def delete_post(*, author, post_id: int):
+        post = CommunityPostService._get_my_post_or_raise(
+            author=author,
+            post_id=post_id,
+        )
+        if post.is_locked or post.feed_policy == FeedPolicy.HIDDEN:
+            raise CommunityTargetLocked()
+        post.delete()
+
+    @staticmethod
+    @transaction.atomic
+    def hide_post(*, post):
+        post.feed_policy = FeedPolicy.HIDDEN
+        post.save(update_fields=["feed_policy", "updated_at"])
+        Activity.objects.filter(post=post).update(feed_policy=FeedPolicy.HIDDEN)
+        return post
+
+    @staticmethod
+    @transaction.atomic
+    def lock_post(*, post):
+        post.is_locked = True
+        post.save(update_fields=["is_locked", "updated_at"])
         return post

@@ -46,6 +46,33 @@ curl -s -X GET "$BASE_URL/api/community/posts/$POST_ID/" \
   -H "Authorization: Bearer $ACCESS_TOKEN" | jq
 ```
 
+## Update My Post
+
+```bash
+curl -s -X PATCH "$BASE_URL/api/community/posts/$POST_ID/" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "content": "Updated post content.",
+    "visibility": "public",
+    "is_spoiler": false,
+    "is_nsfw": false
+  }' | jq
+```
+
+Only the author can update a post. Locked or hidden posts cannot be updated by the author.
+
+## Delete My Post
+
+```bash
+curl -s -X DELETE "$BASE_URL/api/community/posts/$POST_ID/" \
+  -H "Authorization: Bearer $ACCESS_TOKEN"
+```
+
+Returns `204 No Content`.
+
+Locked or hidden posts cannot be deleted by the author.
+
 ## Post Comments
 
 ```bash
@@ -62,3 +89,28 @@ curl -s -X POST "$BASE_URL/api/community/posts/$POST_ID/comments/" \
     "is_spoiler": false
   }' | jq
 ```
+
+Locked posts cannot receive new comments.
+
+## Staff Moderate Post
+
+Requires staff user.
+
+```bash
+curl -s -X PATCH "$BASE_URL/api/community/staff/posts/$POST_ID/moderation/" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action_type": "hide",
+    "reason": "Moderation reason."
+  }' | jq
+```
+
+Supported action types:
+
+```text
+hide
+lock
+```
+
+`hide` removes the post from public lists/detail and hides related post activity. `lock` prevents author edits and new comments.

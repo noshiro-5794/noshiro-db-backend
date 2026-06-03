@@ -5,7 +5,7 @@ from apps.community.exceptions import (
     CannotFollowSelf,
     FollowRelationNotFound,
 )
-from apps.community.models import UserFollow
+from apps.community.models import Activity, UserFollow
 from apps.community.selectors.follow_selector import UserFollowSelector
 from apps.community.selectors.relationship_selector import UserRelationshipSelector
 from apps.community.services.activity_service import ActivityService
@@ -69,3 +69,10 @@ class UserFollowService:
 
         if deleted_count == 0:
             raise FollowRelationNotFound()
+
+        Activity.objects.filter(
+            activity_type=Activity.ActivityType.USER_FOLLOWED,
+            user=follower,
+            target_user=following,
+            dedupe_key=f"user_followed:{follower.id}:{following.id}",
+        ).delete()

@@ -47,6 +47,35 @@ class CommunityPostCreateRequestSerializer(serializers.Serializer):
         return value
 
 
+class CommunityPostUpdateRequestSerializer(serializers.Serializer):
+    content = serializers.CharField(required=False, trim_whitespace=False)
+    visibility = serializers.ChoiceField(
+        required=False,
+        choices=Visibility.choices,
+    )
+    is_spoiler = serializers.BooleanField(required=False)
+    is_nsfw = serializers.BooleanField(required=False)
+
+    def validate_content(self, value):
+        if not value.strip():
+            raise serializers.ValidationError("Post content can not be blank.")
+        return value
+
+    def validate(self, attrs):
+        if not attrs:
+            raise serializers.ValidationError("No fields to update.")
+        return attrs
+
+
+class CommunityPostModerationRequestSerializer(serializers.Serializer):
+    action_type = serializers.ChoiceField(choices=["hide", "lock"])
+    reason = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        trim_whitespace=False,
+    )
+
+
 class CommunityPostResponseSerializer(serializers.ModelSerializer):
     author = serializers.SerializerMethodField()
     subject = serializers.SerializerMethodField()

@@ -10,6 +10,10 @@ from apps.users.api.serializers.public.public_profile_serializer import (
     PublicReviewResponseSerializer,
     PublicCollectionResponseSerializer,
 )
+from apps.users.api.serializers.library.collection_serializer import (
+    CollectionItemResponseSerializer,
+)
+from apps.users.exceptions import CollectionNotFound
 
 
 class PublicUserProfileView(APIView):
@@ -73,6 +77,7 @@ class PublicUserReviewListView(APIView):
             user=user,
             keyword=request.query_params.get("keyword"),
             ordering=request.query_params.get("ordering", "-id"),
+            viewer=request.user,
         )
 
         paginator = DefaultPageNumberPagination()
@@ -99,12 +104,64 @@ class PublicUserCollectionListView(APIView):
             user=user,
             keyword=request.query_params.get("keyword"),
             ordering=request.query_params.get("ordering", "-id"),
+            viewer=request.user,
         )
 
         paginator = DefaultPageNumberPagination()
         page = paginator.paginate_queryset(qs, request, view=self)
 
         serializer = PublicCollectionResponseSerializer(
+            page,
+            many=True,
+        )
+
+        return paginator.get_paginated_response(serializer.data)
+
+
+class PublicUserCollectionDetailView(APIView):
+
+    permission_classes = [AllowAny]
+
+    def get(self, request, user_id: int, collection_id: int):
+        user = PublicProfileSelector.get_user_by_id_or_raise(
+            user_id=user_id,
+        )
+        collection = PublicProfileSelector.get_public_collection(
+            user=user,
+            collection_id=collection_id,
+            viewer=request.user,
+        )
+        if not collection:
+            raise CollectionNotFound()
+
+        serializer = PublicCollectionResponseSerializer(collection)
+
+        return success_response(data=serializer.data)
+
+
+class PublicUserCollectionItemListView(APIView):
+
+    permission_classes = [AllowAny]
+
+    def get(self, request, user_id: int, collection_id: int):
+        user = PublicProfileSelector.get_user_by_id_or_raise(
+            user_id=user_id,
+        )
+        collection = PublicProfileSelector.get_public_collection(
+            user=user,
+            collection_id=collection_id,
+        )
+        if not collection:
+            raise CollectionNotFound()
+
+        qs = PublicProfileSelector.list_public_collection_items(
+            collection=collection,
+        )
+
+        paginator = DefaultPageNumberPagination()
+        page = paginator.paginate_queryset(qs, request, view=self)
+
+        serializer = CollectionItemResponseSerializer(
             page,
             many=True,
         )

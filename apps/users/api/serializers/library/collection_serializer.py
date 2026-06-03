@@ -138,6 +138,8 @@ class CollectionItemUpdateRequestSerializer(serializers.Serializer):
 
 class CollectionListResponseSerializer(serializers.ModelSerializer):
     item_count = serializers.IntegerField(read_only=True)
+    reaction_count = serializers.IntegerField(read_only=True)
+    viewer_state = serializers.SerializerMethodField()
 
     class Meta:
         model = Collection
@@ -148,7 +150,15 @@ class CollectionListResponseSerializer(serializers.ModelSerializer):
             "note",
             "is_public",
             "item_count",
+            "reaction_count",
+            "viewer_state",
         ]
+
+    def get_viewer_state(self, obj):
+        return {
+            "has_liked": bool(getattr(obj, "viewer_has_liked", False)),
+            "has_bookmarked": bool(getattr(obj, "viewer_has_bookmarked", False)),
+        }
 
 
 class CollectionDetailResponseSerializer(CollectionListResponseSerializer):

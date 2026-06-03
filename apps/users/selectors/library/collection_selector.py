@@ -1,5 +1,6 @@
-from django.db.models import Count
+from django.db.models import Count, Exists, OuterRef, Q
 
+from apps.community.models import CommunityBookmark, CommunityReaction
 from apps.users.models import Collection, CollectionItem
 from apps.users.exceptions import CollectionNotFound
 
@@ -9,7 +10,39 @@ class CollectionSelector:
     @staticmethod
     def base_queryset():
         return Collection.objects.select_related("user").annotate(
-            item_count=Count("items", distinct=True)
+            item_count=Count("items", distinct=True),
+            reaction_count=Count(
+                "community_reactions",
+                filter=Q(
+                    community_reactions__reaction_type=CommunityReaction.ReactionType.LIKE
+                ),
+                distinct=True,
+            ),
+        )
+
+    @staticmethod
+    def _is_authenticated_user(user):
+        return bool(user and getattr(user, "is_authenticated", False))
+
+    @classmethod
+    def _annotate_viewer_state(cls, qs, *, viewer=None):
+        if not cls._is_authenticated_user(viewer):
+            return qs
+
+        return qs.annotate(
+            viewer_has_liked=Exists(
+                CommunityReaction.objects.filter(
+                    user=viewer,
+                    collection_id=OuterRef("pk"),
+                    reaction_type=CommunityReaction.ReactionType.LIKE,
+                )
+            ),
+            viewer_has_bookmarked=Exists(
+                CommunityBookmark.objects.filter(
+                    user=viewer,
+                    collection_id=OuterRef("pk"),
+                )
+            ),
         )
 
     @classmethod
@@ -20,7 +53,7 @@ class CollectionSelector:
         keyword=None,
         ordering="id",
     ):
-        qs = cls.base_queryset().filter(user=user)
+        qs = cls._annotate_viewer_state(cls.base_queryset().filter(user=user), viewer=user)
 
         if keyword:
             keyword = keyword.strip()
@@ -45,10 +78,13 @@ class CollectionSelector:
 
     @classmethod
     def get_my_collection(cls, *, user, collection_id: int):
-        return cls.base_queryset().get(
-            id=collection_id,
-            user=user,
-        )
+        return cls._annotate_viewer_state(
+            cls.base_queryset().filter(
+                id=collection_id,
+                user=user,
+            ),
+            viewer=user,
+        ).get()
 
     @classmethod
     def get_my_collection_or_raise(cls, *, user, collection_id: int):

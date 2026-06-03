@@ -9,6 +9,24 @@ class SubjectResyncRequestSerializer(serializers.Serializer):
     )
 
 
+class BangumiSubjectSyncRequestSerializer(serializers.Serializer):
+
+    bangumi_id = serializers.IntegerField(
+        min_value=1,
+    )
+    run_async = serializers.BooleanField(
+        required=False,
+        default=True,
+    )
+
+
+class BangumiSubjectSyncQueuedResponseSerializer(serializers.Serializer):
+
+    task_id = serializers.CharField()
+    status = serializers.CharField()
+    bangumi_id = serializers.IntegerField()
+
+
 class SubjectResyncQueuedResponseSerializer(serializers.Serializer):
 
     task_id = serializers.CharField()

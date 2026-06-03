@@ -43,6 +43,8 @@ class ActivityResponseSerializer(serializers.ModelSerializer):
     collection_item = serializers.SerializerMethodField()
     post = serializers.SerializerMethodField()
     comment = serializers.SerializerMethodField()
+    reaction_count = serializers.IntegerField(read_only=True)
+    viewer_state = serializers.SerializerMethodField()
 
     class Meta:
         model = Activity
@@ -61,6 +63,8 @@ class ActivityResponseSerializer(serializers.ModelSerializer):
             "message",
             "visibility",
             "feed_policy",
+            "reaction_count",
+            "viewer_state",
             "group_key",
             "dedupe_key",
             "created_at",
@@ -189,4 +193,9 @@ class ActivityResponseSerializer(serializers.ModelSerializer):
             "visibility": comment.visibility,
             "is_spoiler": comment.is_spoiler,
             "created_at": comment.created_at,
+        }
+
+    def get_viewer_state(self, obj):
+        return {
+            "has_liked": bool(getattr(obj, "viewer_has_liked", False)),
         }

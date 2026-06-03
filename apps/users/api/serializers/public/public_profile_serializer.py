@@ -98,6 +98,8 @@ class PublicUserSubjectResponseSerializer(serializers.ModelSerializer):
 class PublicReviewResponseSerializer(serializers.ModelSerializer):
     subject = serializers.SerializerMethodField()
     user_subject = serializers.SerializerMethodField()
+    reaction_count = serializers.IntegerField(read_only=True)
+    viewer_state = serializers.SerializerMethodField()
 
     class Meta:
         model = Review
@@ -107,8 +109,10 @@ class PublicReviewResponseSerializer(serializers.ModelSerializer):
             "content",
             "is_spoiler",
             "created_at",
+            "reaction_count",
             "subject",
             "user_subject",
+            "viewer_state",
         ]
 
     def get_subject(self, obj):
@@ -136,9 +140,17 @@ class PublicReviewResponseSerializer(serializers.ModelSerializer):
             "comment": user_subject.comment,
         }
 
+    def get_viewer_state(self, obj):
+        return {
+            "has_liked": bool(getattr(obj, "viewer_has_liked", False)),
+            "has_bookmarked": bool(getattr(obj, "viewer_has_bookmarked", False)),
+        }
+
 
 class PublicCollectionResponseSerializer(serializers.ModelSerializer):
     item_count = serializers.IntegerField(read_only=True)
+    reaction_count = serializers.IntegerField(read_only=True)
+    viewer_state = serializers.SerializerMethodField()
 
     class Meta:
         model = Collection
@@ -148,4 +160,12 @@ class PublicCollectionResponseSerializer(serializers.ModelSerializer):
             "simple_rating",
             "note",
             "item_count",
+            "reaction_count",
+            "viewer_state",
         ]
+
+    def get_viewer_state(self, obj):
+        return {
+            "has_liked": bool(getattr(obj, "viewer_has_liked", False)),
+            "has_bookmarked": bool(getattr(obj, "viewer_has_bookmarked", False)),
+        }

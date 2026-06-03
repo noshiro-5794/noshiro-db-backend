@@ -64,6 +64,8 @@ class ReviewUpdateRequestSerializer(serializers.Serializer):
 class ReviewListResponseSerializer(serializers.ModelSerializer):
     subject = serializers.SerializerMethodField()
     user = serializers.SerializerMethodField()
+    reaction_count = serializers.IntegerField(read_only=True)
+    viewer_state = serializers.SerializerMethodField()
 
     class Meta:
         model = Review
@@ -75,8 +77,10 @@ class ReviewListResponseSerializer(serializers.ModelSerializer):
             "is_spoiler",
             "created_at",
             "updated_at",
+            "reaction_count",
             "subject",
             "user",
+            "viewer_state",
         ]
 
     def get_subject(self, obj):
@@ -97,6 +101,12 @@ class ReviewListResponseSerializer(serializers.ModelSerializer):
             "id": obj.user_subject.user.id,
             "nickname": profile.nickname if profile else obj.user_subject.user.email,
             "avatar": profile.avatar if profile else None,
+        }
+
+    def get_viewer_state(self, obj):
+        return {
+            "has_liked": bool(getattr(obj, "viewer_has_liked", False)),
+            "has_bookmarked": bool(getattr(obj, "viewer_has_bookmarked", False)),
         }
 
 

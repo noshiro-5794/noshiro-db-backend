@@ -36,6 +36,7 @@ class PublicUserActivityListView(APIView):
             user=user,
             activity_type=request.query_params.get("activity_type"),
             ordering=request.query_params.get("ordering", "-created_at"),
+            viewer=request.user,
         )
 
         paginator = DefaultPageNumberPagination()

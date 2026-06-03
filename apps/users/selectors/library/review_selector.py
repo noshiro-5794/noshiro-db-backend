@@ -1,5 +1,6 @@
-from django.db.models import Q
+from django.db.models import Count, Exists, OuterRef, Q
 
+from apps.community.models import CommunityBookmark, CommunityReaction
 from apps.users.models import Review, UserSubject
 from apps.users.exceptions import UserSubjectNotFound, ReviewNotFound
 
@@ -14,6 +15,41 @@ class ReviewSelector:
             "user_subject__subject",
         )
 
+    @staticmethod
+    def _is_authenticated_user(user):
+        return bool(user and getattr(user, "is_authenticated", False))
+
+    @classmethod
+    def _annotate_community_state(cls, qs, *, viewer=None):
+        qs = qs.annotate(
+            reaction_count=Count(
+                "community_reactions",
+                filter=Q(
+                    community_reactions__reaction_type=CommunityReaction.ReactionType.LIKE
+                ),
+                distinct=True,
+            )
+        )
+
+        if not cls._is_authenticated_user(viewer):
+            return qs
+
+        return qs.annotate(
+            viewer_has_liked=Exists(
+                CommunityReaction.objects.filter(
+                    user=viewer,
+                    review_id=OuterRef("pk"),
+                    reaction_type=CommunityReaction.ReactionType.LIKE,
+                )
+            ),
+            viewer_has_bookmarked=Exists(
+                CommunityBookmark.objects.filter(
+                    user=viewer,
+                    review_id=OuterRef("pk"),
+                )
+            ),
+        )
+
     @classmethod
     def list_my_reviews(
         cls,
@@ -25,6 +61,7 @@ class ReviewSelector:
         qs = cls.base_queryset().filter(
             user_subject__user=user,
         )
+        qs = cls._annotate_community_state(qs, viewer=user)
 
         if keyword:
             keyword = keyword.strip()
@@ -47,10 +84,13 @@ class ReviewSelector:
 
     @classmethod
     def get_my_review(cls, *, user, review_id: int):
-        return cls.base_queryset().get(
-            id=review_id,
-            user_subject__user=user,
-        )
+        return cls._annotate_community_state(
+            cls.base_queryset().filter(
+                id=review_id,
+                user_subject__user=user,
+            ),
+            viewer=user,
+        ).get()
 
     @classmethod
     def get_my_review_or_raise(cls, *, user, review_id: int):
@@ -115,25 +155,29 @@ class ReviewSelector:
             subject_id=subject_id,
         )
 
-        return cls.base_queryset().filter(user_subject=user_subject).order_by(
-            "-created_at", "-id"
-        )
+        return cls._annotate_community_state(
+            cls.base_queryset().filter(user_subject=user_subject),
+            viewer=user,
+        ).order_by("-created_at", "-id")
 
     @classmethod
-    def list_public_subject_reviews(cls, *, subject_id):
-        return cls.base_queryset().filter(
+    def list_public_subject_reviews(cls, *, subject_id, viewer=None):
+        return cls._annotate_community_state(cls.base_queryset().filter(
             user_subject__subject_id=subject_id,
             user_subject__is_public=True,
             is_public=True,
-        ).order_by("-updated_at", "-id")
+        ), viewer=viewer).order_by("-updated_at", "-id")
 
     @classmethod
-    def get_public_review_or_raise(cls, *, review_id: int):
+    def get_public_review_or_raise(cls, *, review_id: int, viewer=None):
         try:
-            return cls.base_queryset().get(
-                id=review_id,
-                user_subject__is_public=True,
-                is_public=True,
-            )
+            return cls._annotate_community_state(
+                cls.base_queryset().filter(
+                    id=review_id,
+                    user_subject__is_public=True,
+                    is_public=True,
+                ),
+                viewer=viewer,
+            ).get()
         except Review.DoesNotExist:
             raise ReviewNotFound()

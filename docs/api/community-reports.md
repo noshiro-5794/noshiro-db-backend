@@ -83,3 +83,5 @@ warn
 mute
 ban
 ```
+
+For `post` and `comment` reports, `hide` and `lock` are executed immediately on the target content. Other action types are recorded as moderation actions for future handling.

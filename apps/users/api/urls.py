@@ -53,6 +53,8 @@ from apps.users.api.views.public.public_profile_view import (
     PublicUserSubjectListView,
     PublicUserReviewListView,
     PublicUserCollectionListView,
+    PublicUserCollectionDetailView,
+    PublicUserCollectionItemListView,
 )
 
 urlpatterns = [
@@ -235,5 +237,15 @@ urlpatterns = [
         "<int:user_id>/collections/",
         PublicUserCollectionListView.as_view(),
         name="public-user-collection-list",
+    ),
+    path(
+        "<int:user_id>/collections/<int:collection_id>/",
+        PublicUserCollectionDetailView.as_view(),
+        name="public-user-collection-detail",
+    ),
+    path(
+        "<int:user_id>/collections/<int:collection_id>/items/",
+        PublicUserCollectionItemListView.as_view(),
+        name="public-user-collection-item-list",
     ),
 ]

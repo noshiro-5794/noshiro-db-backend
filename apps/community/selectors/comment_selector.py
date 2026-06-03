@@ -1,4 +1,4 @@
-from django.db.models import Exists, OuterRef
+from django.db.models import Exists, OuterRef, Q
 
 from apps.community.models import CommunityComment, Visibility
 from apps.community.selectors.target_selector import CommunityTargetSelector
@@ -88,7 +88,7 @@ class CommunityCommentSelector:
         qs = cls.base_queryset().filter(
             **{target_type: target},
             visibility=Visibility.PUBLIC,
-        )
+        ).filter(Q(is_hidden=False) | Q(reply_count__gt=0))
         qs = cls._apply_viewer_filters(qs, viewer=viewer)
         qs = cls._annotate_viewer_state(qs, viewer=viewer)
 

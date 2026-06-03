@@ -141,8 +141,12 @@ Community surfaces are centered on posts, comments, activities, reviews, collect
 ```text
 GET  /api/community/posts/
 POST /api/community/posts/
+PATCH /api/community/posts/{post_id}/
+DELETE /api/community/posts/{post_id}/
 GET  /api/community/comments/?target_type=post&target_id=1
 POST /api/community/comments/
+PATCH /api/community/comments/{comment_id}/
+DELETE /api/community/comments/{comment_id}/
 POST /api/community/reactions/
 POST /api/community/bookmarks/
 GET  /api/community/me/feed/
@@ -150,6 +154,13 @@ GET  /api/community/notifications/
 ```
 
 Post and comment responses include `viewer_state` for active reaction/bookmark/follow UI state.
+
+Staff moderation endpoints:
+
+```text
+PATCH /api/community/staff/posts/{post_id}/moderation/
+PATCH /api/community/staff/comments/{comment_id}/moderation/
+```
 
 ### Staff Sync
 

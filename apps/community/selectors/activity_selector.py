@@ -1,7 +1,8 @@
-from django.db.models import Q, Subquery
+from django.db.models import Count, Exists, OuterRef, Q, Subquery
 
 from apps.community.models import (
     Activity,
+    CommunityReaction,
     FeedPolicy,
     UserBlock,
     UserFollow,
@@ -36,6 +37,33 @@ class ActivitySelector:
         )
 
     @staticmethod
+    def _is_authenticated_user(user):
+        return bool(user and getattr(user, "is_authenticated", False))
+
+    @classmethod
+    def _annotate_community_state(cls, qs, *, viewer=None):
+        qs = qs.annotate(
+            reaction_count=Count(
+                "reactions",
+                filter=Q(reactions__reaction_type=CommunityReaction.ReactionType.LIKE),
+                distinct=True,
+            )
+        )
+
+        if not cls._is_authenticated_user(viewer):
+            return qs
+
+        return qs.annotate(
+            viewer_has_liked=Exists(
+                CommunityReaction.objects.filter(
+                    user=viewer,
+                    activity_id=OuterRef("pk"),
+                    reaction_type=CommunityReaction.ReactionType.LIKE,
+                )
+            )
+        )
+
+    @staticmethod
     def public_visibility_filter():
         return (
             Q(visibility=Visibility.PUBLIC)
@@ -66,7 +94,7 @@ class ActivitySelector:
         activity_type=None,
         ordering="-created_at",
     ):
-        qs = cls.base_queryset().filter(user=user)
+        qs = cls._annotate_community_state(cls.base_queryset().filter(user=user), viewer=user)
 
         if activity_type:
             qs = qs.filter(activity_type=activity_type)
@@ -90,12 +118,14 @@ class ActivitySelector:
         user,
         activity_type=None,
         ordering="-created_at",
+        viewer=None,
     ):
         qs = (
             cls.base_queryset()
             .filter(user=user)
             .filter(cls.public_visibility_filter())
         )
+        qs = cls._annotate_community_state(qs, viewer=viewer)
 
         if activity_type:
             qs = qs.filter(activity_type=activity_type)
@@ -142,13 +172,16 @@ class ActivitySelector:
             .exclude(user_id__in=Subquery(muted_user_ids))
             .filter(cls.public_visibility_filter())
         )
+        qs = cls._annotate_community_state(qs, viewer=user)
 
         if include_self:
-            qs = qs | (
+            self_qs = cls._annotate_community_state(
                 cls.base_queryset()
                 .filter(user=user)
-                .filter(cls.public_visibility_filter())
+                .filter(cls.public_visibility_filter()),
+                viewer=user,
             )
+            qs = qs | self_qs
 
         if activity_type:
             qs = qs.filter(activity_type=activity_type)

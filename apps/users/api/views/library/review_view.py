@@ -141,7 +141,10 @@ class PublicSubjectReviewListView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request, subject_id):
-        qs = ReviewSelector.list_public_subject_reviews(subject_id=subject_id)
+        qs = ReviewSelector.list_public_subject_reviews(
+            subject_id=subject_id,
+            viewer=request.user,
+        )
 
         paginator = DefaultPageNumberPagination()
         page = paginator.paginate_queryset(qs, request, view=self)
@@ -159,7 +162,10 @@ class PublicReviewDetailView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request, review_id: int):
-        review = ReviewSelector.get_public_review_or_raise(review_id=review_id)
+        review = ReviewSelector.get_public_review_or_raise(
+            review_id=review_id,
+            viewer=request.user,
+        )
 
         serializer = ReviewDetailResponseSerializer(review)
 

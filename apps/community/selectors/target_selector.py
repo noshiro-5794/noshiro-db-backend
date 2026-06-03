@@ -32,6 +32,7 @@ class CommunityTargetSelector:
         return CommunityComment.objects.filter(
             id=target_id,
             visibility=Visibility.PUBLIC,
+            is_hidden=False,
         ).first()
 
     @staticmethod

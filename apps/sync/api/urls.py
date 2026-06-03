@@ -1,6 +1,7 @@
 from django.urls import path
 
 from apps.sync.api.views.manual_sync_view import (
+    BangumiSubjectSyncView,
     CalendarSyncRunView,
     IncrementalSyncRunView,
     IncrementalSyncStatusView,
@@ -9,6 +10,11 @@ from apps.sync.api.views.manual_sync_view import (
 
 
 urlpatterns = [
+    path(
+        "subjects/bangumi/",
+        BangumiSubjectSyncView.as_view(),
+        name="sync-subject-bangumi",
+    ),
     path(
         "calendar/run/",
         CalendarSyncRunView.as_view(),

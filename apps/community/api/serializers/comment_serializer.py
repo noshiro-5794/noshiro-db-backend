@@ -21,6 +21,34 @@ class CommunityCommentCreateRequestSerializer(serializers.Serializer):
         return value
 
 
+class CommunityCommentUpdateRequestSerializer(serializers.Serializer):
+    content = serializers.CharField(required=False, trim_whitespace=False)
+    visibility = serializers.ChoiceField(
+        required=False,
+        choices=Visibility.choices,
+    )
+    is_spoiler = serializers.BooleanField(required=False)
+
+    def validate_content(self, value):
+        if not value.strip():
+            raise serializers.ValidationError("Comment content can not be blank.")
+        return value
+
+    def validate(self, attrs):
+        if not attrs:
+            raise serializers.ValidationError("No fields to update.")
+        return attrs
+
+
+class CommunityCommentModerationRequestSerializer(serializers.Serializer):
+    action_type = serializers.ChoiceField(choices=["hide", "lock"])
+    reason = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        trim_whitespace=False,
+    )
+
+
 class CommunityTargetCommentCreateRequestSerializer(CommunityCommentCreateRequestSerializer):
     target_type = serializers.ChoiceField(
         choices=sorted(CommunityTargetSelector.COMMENT_TARGETS)
@@ -49,6 +77,8 @@ class CommunityCommentResponseSerializer(serializers.ModelSerializer):
             "content",
             "visibility",
             "is_spoiler",
+            "is_hidden",
+            "is_locked",
             "reply_count",
             "reaction_count",
             "created_at",
@@ -58,6 +88,8 @@ class CommunityCommentResponseSerializer(serializers.ModelSerializer):
         ]
 
     def get_author(self, obj):
+        if obj.is_hidden:
+            return None
         return CommunityUserResponseSerializer(obj.author).data
 
     def get_target(self, obj):

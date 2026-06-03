@@ -9,6 +9,8 @@ from apps.community.models import (
     ModerationAction,
 )
 from apps.community.selectors.target_selector import CommunityTargetSelector
+from apps.community.services.comment_service import CommunityCommentService
+from apps.community.services.post_service import CommunityPostService
 from apps.users.models import Collection, Review
 
 
@@ -75,6 +77,20 @@ class CommunityReportService:
         report.save(update_fields=["status", "resolved_by", "resolved_at"])
 
         if action_type:
+            if action_type == ModerationAction.ActionType.HIDE:
+                if report.post:
+                    CommunityPostService.hide_post(post=report.post)
+                elif report.comment:
+                    CommunityCommentService.hide_comment(comment=report.comment)
+                elif report.activity:
+                    report.activity.feed_policy = "hidden"
+                    report.activity.save(update_fields=["feed_policy"])
+            elif action_type == ModerationAction.ActionType.LOCK:
+                if report.post:
+                    CommunityPostService.lock_post(post=report.post)
+                elif report.comment:
+                    CommunityCommentService.lock_comment(comment=report.comment)
+
             ModerationAction.objects.create(
                 moderator=moderator,
                 target_user=report.reported_user,

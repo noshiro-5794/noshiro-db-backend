@@ -1,18 +1,86 @@
 from django.contrib.auth import get_user_model
-from django.db.models import Count, Q
+from django.db.models import Count, Exists, OuterRef, Q
 
 from apps.users.models import (
     UserSubject,
     Review,
     Collection,
+    CollectionItem,
 )
-from apps.community.models import UserFollow
+from apps.community.models import CommunityBookmark, CommunityReaction, UserFollow
 from apps.users.exceptions import UserNotFound
 
 User = get_user_model()
 
 
 class PublicProfileSelector:
+
+    @staticmethod
+    def _is_authenticated_user(user):
+        return bool(user and getattr(user, "is_authenticated", False))
+
+    @classmethod
+    def _annotate_review_community_state(cls, qs, *, viewer=None):
+        qs = qs.annotate(
+            reaction_count=Count(
+                "community_reactions",
+                filter=Q(
+                    community_reactions__reaction_type=CommunityReaction.ReactionType.LIKE
+                ),
+                distinct=True,
+            )
+        )
+
+        if not cls._is_authenticated_user(viewer):
+            return qs
+
+        return qs.annotate(
+            viewer_has_liked=Exists(
+                CommunityReaction.objects.filter(
+                    user=viewer,
+                    review_id=OuterRef("pk"),
+                    reaction_type=CommunityReaction.ReactionType.LIKE,
+                )
+            ),
+            viewer_has_bookmarked=Exists(
+                CommunityBookmark.objects.filter(
+                    user=viewer,
+                    review_id=OuterRef("pk"),
+                )
+            ),
+        )
+
+    @classmethod
+    def _annotate_collection_community_state(cls, qs, *, viewer=None):
+        qs = qs.annotate(
+            item_count=Count("items", distinct=True),
+            reaction_count=Count(
+                "community_reactions",
+                filter=Q(
+                    community_reactions__reaction_type=CommunityReaction.ReactionType.LIKE
+                ),
+                distinct=True,
+            ),
+        )
+
+        if not cls._is_authenticated_user(viewer):
+            return qs
+
+        return qs.annotate(
+            viewer_has_liked=Exists(
+                CommunityReaction.objects.filter(
+                    user=viewer,
+                    collection_id=OuterRef("pk"),
+                    reaction_type=CommunityReaction.ReactionType.LIKE,
+                )
+            ),
+            viewer_has_bookmarked=Exists(
+                CommunityBookmark.objects.filter(
+                    user=viewer,
+                    collection_id=OuterRef("pk"),
+                )
+            ),
+        )
 
     @staticmethod
     def get_user_by_id(*, user_id: int):
@@ -125,12 +193,14 @@ class PublicProfileSelector:
 
         return qs.order_by(ordering, "-id")
 
-    @staticmethod
+    @classmethod
     def list_public_reviews(
+        cls,
         *,
         user,
         keyword=None,
         ordering="-id",
+        viewer=None,
     ):
         qs = Review.objects.select_related(
             "user_subject",
@@ -141,7 +211,10 @@ class PublicProfileSelector:
             user_subject__is_public=True,
         )
 
-        qs = qs.filter(is_public=True)
+        qs = cls._annotate_review_community_state(
+            qs.filter(is_public=True),
+            viewer=viewer,
+        )
 
         if keyword:
             keyword = keyword.strip()
@@ -168,19 +241,20 @@ class PublicProfileSelector:
 
         return qs.order_by(ordering, "-id")
 
-    @staticmethod
+    @classmethod
     def list_public_collections(
+        cls,
         *,
         user,
         keyword=None,
         ordering="-id",
+        viewer=None,
     ):
         qs = Collection.objects.filter(
             user=user,
             is_public=True,
-        ).annotate(
-            item_count=Count("items", distinct=True)
         )
+        qs = cls._annotate_collection_community_state(qs, viewer=viewer)
 
         if keyword:
             keyword = keyword.strip()
@@ -202,3 +276,29 @@ class PublicProfileSelector:
             ordering = "-id"
 
         return qs.order_by(ordering, "-id")
+
+    @classmethod
+    def get_public_collection(cls, *, user, collection_id: int, viewer=None):
+        return (
+            cls._annotate_collection_community_state(Collection.objects.filter(
+                user=user,
+                id=collection_id,
+                is_public=True,
+            ), viewer=viewer)
+            .first()
+        )
+
+    @staticmethod
+    def list_public_collection_items(*, collection):
+        return (
+            CollectionItem.objects.select_related(
+                "collection",
+                "user_subject",
+                "user_subject__subject",
+            )
+            .filter(
+                collection=collection,
+                user_subject__is_public=True,
+            )
+            .order_by("order", "id")
+        )

@@ -2,7 +2,11 @@ from django.db import transaction
 from django.db.models import F
 from django.utils import timezone
 
-from apps.community.exceptions import CommunityCommentNotFound
+from apps.community.exceptions import (
+    CommunityCommentNotFound,
+    CommunityPermissionDenied,
+    CommunityTargetLocked,
+)
 from apps.community.models import (
     Activity,
     CommunityComment,
@@ -58,6 +62,19 @@ class CommunityCommentService:
             )
 
     @staticmethod
+    def _decrement_target_reply_count(*, comment):
+        if comment.post_id:
+            CommunityPost.objects.filter(
+                id=comment.post_id,
+                reply_count__gt=0,
+            ).update(reply_count=F("reply_count") - 1)
+        if comment.parent_id:
+            CommunityComment.objects.filter(
+                id=comment.parent_id,
+                reply_count__gt=0,
+            ).update(reply_count=F("reply_count") - 1)
+
+    @staticmethod
     def _activity_kwargs(*, target_type: str, target):
         if target_type in {"post", "review", "collection"}:
             return {target_type: target}
@@ -81,6 +98,9 @@ class CommunityCommentService:
             target_id=target_id,
             allowed_targets=CommunityTargetSelector.COMMENT_TARGETS,
         )
+        if getattr(target, "is_locked", False):
+            raise CommunityTargetLocked()
+
         target_kwargs = cls._target_kwargs(target_type=target_type, target=target)
 
         parent = None
@@ -91,6 +111,8 @@ class CommunityCommentService:
             ).first()
             if not parent:
                 raise CommunityCommentNotFound()
+            if parent.is_locked or parent.is_hidden:
+                raise CommunityTargetLocked()
 
         comment = CommunityComment.objects.create(
             author=author,
@@ -156,3 +178,86 @@ class CommunityCommentService:
             visibility=visibility,
             is_spoiler=is_spoiler,
         )
+
+    @staticmethod
+    def _get_my_comment_or_raise(*, author, comment_id: int):
+        comment = CommunityComment.objects.filter(id=comment_id).first()
+        if not comment:
+            raise CommunityCommentNotFound()
+        if comment.author_id != author.id:
+            raise CommunityPermissionDenied()
+        return comment
+
+    @staticmethod
+    @transaction.atomic
+    def update_comment(*, author, comment_id: int, **fields):
+        comment = CommunityCommentService._get_my_comment_or_raise(
+            author=author,
+            comment_id=comment_id,
+        )
+        if comment.is_locked or comment.is_hidden:
+            raise CommunityTargetLocked()
+
+        allowed_fields = {
+            "content",
+            "visibility",
+            "is_spoiler",
+        }
+        update_fields = []
+        for key, value in fields.items():
+            if key not in allowed_fields:
+                continue
+            setattr(comment, key, value)
+            update_fields.append(key)
+
+        if update_fields:
+            update_fields.append("updated_at")
+            comment.save(update_fields=update_fields)
+
+        return comment
+
+    @staticmethod
+    @transaction.atomic
+    def delete_comment(*, author, comment_id: int):
+        comment = CommunityCommentService._get_my_comment_or_raise(
+            author=author,
+            comment_id=comment_id,
+        )
+        if comment.is_locked or comment.is_hidden:
+            raise CommunityTargetLocked()
+
+        has_replies = CommunityComment.objects.filter(parent=comment).exists()
+        if has_replies:
+            comment.content = ""
+            comment.is_hidden = True
+            comment.is_spoiler = False
+            comment.save(
+                update_fields=[
+                    "content",
+                    "is_hidden",
+                    "is_spoiler",
+                    "updated_at",
+                ]
+            )
+            Activity.objects.filter(comment=comment).update(
+                feed_policy=FeedPolicy.HIDDEN
+            )
+            return
+
+        CommunityCommentService._decrement_target_reply_count(comment=comment)
+        comment.delete()
+
+    @staticmethod
+    @transaction.atomic
+    def hide_comment(*, comment):
+        comment.is_hidden = True
+        comment.save(update_fields=["is_hidden", "updated_at"])
+        Activity.objects.filter(comment=comment).update(feed_policy=FeedPolicy.HIDDEN)
+        return comment
+
+    @staticmethod
+    @transaction.atomic
+    def lock_comment(*, comment):
+        comment.is_locked = True
+        comment.save(update_fields=["is_locked", "updated_at"])
+        return comment

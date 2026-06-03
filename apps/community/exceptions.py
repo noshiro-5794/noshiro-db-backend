@@ -19,6 +19,18 @@ class CommunityCommentNotFound(CommunityException):
     default_detail = "community comment not found"
 
 
+class CommunityPermissionDenied(CommunityException):
+
+    default_code = 31110
+    default_detail = "community permission denied"
+
+
+class CommunityTargetLocked(CommunityException):
+
+    default_code = 31111
+    default_detail = "community target is locked"
+
+
 class CannotFollowSelf(CommunityException):
 
     default_code = 31200

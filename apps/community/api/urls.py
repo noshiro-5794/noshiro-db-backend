@@ -5,7 +5,11 @@ from apps.community.api.views.activity_view import (
     MyFeedView,
     PublicUserActivityListView,
 )
-from apps.community.api.views.comment_view import CommunityCommentListCreateView
+from apps.community.api.views.comment_view import (
+    CommunityCommentDetailView,
+    CommunityCommentListCreateView,
+    StaffCommunityCommentModerationView,
+)
 from apps.community.api.views.follow_view import (
     MyFollowerListView,
     MyFollowingListView,
@@ -27,6 +31,7 @@ from apps.community.api.views.post_view import (
     CommunityPostCommentListCreateView,
     CommunityPostDetailView,
     CommunityPostListCreateView,
+    StaffCommunityPostModerationView,
 )
 from apps.community.api.views.report_view import (
     CommunityReportCreateView,
@@ -119,6 +124,11 @@ urlpatterns = [
         name="community-comment-list-create",
     ),
     path(
+        "comments/<int:comment_id>/",
+        CommunityCommentDetailView.as_view(),
+        name="community-comment-detail",
+    ),
+    path(
         "notifications/",
         MyNotificationListView.as_view(),
         name="community-my-notification-list",
@@ -157,6 +167,16 @@ urlpatterns = [
         "staff/reports/<int:report_id>/resolve/",
         StaffCommunityReportResolveView.as_view(),
         name="community-staff-report-resolve",
+    ),
+    path(
+        "staff/posts/<int:post_id>/moderation/",
+        StaffCommunityPostModerationView.as_view(),
+        name="community-staff-post-moderation",
+    ),
+    path(
+        "staff/comments/<int:comment_id>/moderation/",
+        StaffCommunityCommentModerationView.as_view(),
+        name="community-staff-comment-moderation",
     ),
     path(
         "posts/",

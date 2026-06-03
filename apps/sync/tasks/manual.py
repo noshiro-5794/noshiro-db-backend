@@ -25,3 +25,12 @@ class ManualSyncTask:
 )
 def sync_subject_by_uuid_task(self, subject_id: str):
     return ManualSyncTask.sync_subject_by_uuid(subject_id)
+
+
+@shared_task(
+    bind=True,
+    soft_time_limit=300,
+    time_limit=360,
+)
+def sync_subject_by_bangumi_id_task(self, bangumi_id: int):
+    return ManualSyncTask.sync_subject(bangumi_id)

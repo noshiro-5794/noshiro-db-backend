@@ -1,7 +1,10 @@
 from rest_framework import status
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
+from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.community.exceptions import CommunityPostNotFound
+from apps.community.models import CommunityPost, ModerationAction
 from apps.core.pagination import DefaultPageNumberPagination
 from apps.core.response import success_response
 from apps.index.selectors.subject_selector import SubjectSelector
@@ -11,7 +14,9 @@ from apps.community.api.serializers.comment_serializer import (
 )
 from apps.community.api.serializers.post_serializer import (
     CommunityPostCreateRequestSerializer,
+    CommunityPostModerationRequestSerializer,
     CommunityPostResponseSerializer,
+    CommunityPostUpdateRequestSerializer,
 )
 from apps.community.selectors.comment_selector import CommunityCommentSelector
 from apps.community.selectors.post_selector import CommunityPostSelector
@@ -71,7 +76,10 @@ class CommunityPostListCreateView(APIView):
 
 class CommunityPostDetailView(APIView):
 
-    permission_classes = [AllowAny]
+    def get_permissions(self):
+        if self.request.method in {"PATCH", "DELETE"}:
+            return [IsAuthenticated()]
+        return [AllowAny()]
 
     def get(self, request, post_id: int):
         post = CommunityPostSelector.get_public_post_or_raise(
@@ -84,6 +92,62 @@ class CommunityPostDetailView(APIView):
         )
 
         return success_response(data=serializer.data)
+
+    def patch(self, request, post_id: int):
+        serializer = CommunityPostUpdateRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        post = CommunityPostService.update_post(
+            author=request.user,
+            post_id=post_id,
+            **serializer.validated_data,
+        )
+        output_serializer = CommunityPostResponseSerializer(
+            post,
+            context={"request": request},
+        )
+
+        return success_response(data=output_serializer.data)
+
+    def delete(self, request, post_id: int):
+        CommunityPostService.delete_post(
+            author=request.user,
+            post_id=post_id,
+        )
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class StaffCommunityPostModerationView(APIView):
+
+    permission_classes = [IsAdminUser]
+
+    def patch(self, request, post_id: int):
+        serializer = CommunityPostModerationRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        post = CommunityPost.objects.filter(id=post_id).first()
+        if not post:
+            raise CommunityPostNotFound()
+
+        action_type = serializer.validated_data["action_type"]
+        if action_type == "hide":
+            post = CommunityPostService.hide_post(post=post)
+        elif action_type == "lock":
+            post = CommunityPostService.lock_post(post=post)
+
+        ModerationAction.objects.create(
+            moderator=request.user,
+            target_user=post.author,
+            post=post,
+            action_type=action_type,
+            reason=serializer.validated_data.get("reason", ""),
+        )
+
+        output_serializer = CommunityPostResponseSerializer(
+            post,
+            context={"request": request},
+        )
+        return success_response(data=output_serializer.data)
 
 
 class CommunityPostCommentListCreateView(APIView):

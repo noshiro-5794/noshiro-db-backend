@@ -197,6 +197,8 @@ class CommunityComment(models.Model):
         default=Visibility.PUBLIC,
     )
     is_spoiler = models.BooleanField(default=False)
+    is_hidden = models.BooleanField(default=False)
+    is_locked = models.BooleanField(default=False)
     reply_count = models.PositiveIntegerField(default=0)
     reaction_count = models.PositiveIntegerField(default=0)
     metadata = models.JSONField(default=dict, blank=True)
