@@ -1,0 +1,38 @@
+services:
+  web:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - ${ENV_FILE:-.env.production}
+    environment:
+      RUN_MIGRATIONS: "true"
+      COLLECT_STATIC: "true"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${WEB_PORT:-8008}:8008"
+    command: >
+      gunicorn config.wsgi:application
+      --bind 0.0.0.0:8008
+      --workers ${GUNICORN_WORKERS:-3}
+      --timeout ${GUNICORN_TIMEOUT:-120}
+
+  worker:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - ${ENV_FILE:-.env.production}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: >
+      celery -A config worker -l info
+      --concurrency ${CELERY_WORKER_CONCURRENCY:-2}
+
+  beat:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - ${ENV_FILE:-.env.production}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: celery -A config beat -l info

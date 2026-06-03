@@ -3,9 +3,9 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv(override=True)
-
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
+
+load_dotenv(BASE_DIR / ".env", override=True)
 
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "unsafe-secret-key")
 

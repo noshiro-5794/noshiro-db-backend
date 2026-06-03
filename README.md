@@ -116,6 +116,32 @@ Default scheduled jobs:
 04:00 daily incremental sync
 ```
 
+## Docker Deployment
+
+This deployment mode assumes PostgreSQL, Redis, and MinIO are already running on the server.
+
+Create a production environment file:
+
+```bash
+cp .env.production.example .env.production
+```
+
+Edit `.env.production` with real secrets, domains, MinIO credentials, and API keys. Then build and start:
+
+```bash
+ENV_FILE=.env.production docker compose -f docker-compose.app.yml --env-file .env.production up -d --build
+```
+
+The compose stack starts:
+
+```text
+web      Django served by Gunicorn on WEB_PORT, default 8008
+worker   Celery worker
+beat     Celery Beat scheduled jobs
+```
+
+For production, put Nginx or Caddy in front of `web` and forward HTTPS requests with `X-Forwarded-Proto: https`.
+
 ## Verification
 
 Run:
