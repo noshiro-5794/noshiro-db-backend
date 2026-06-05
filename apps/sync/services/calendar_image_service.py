@@ -13,7 +13,13 @@ class CalendarImageService:
     FOLDER = "calendar-covers"
 
     @classmethod
-    def cache_cover(cls, *, bangumi_id: int, images: dict | None) -> str:
+    def cache_cover(
+        cls,
+        *,
+        bangumi_id: int,
+        images: dict | None,
+        verbose: bool = False,
+    ) -> str:
         image_url = cls._select_image_url(images)
         if not image_url:
             return ""
@@ -41,7 +47,9 @@ class CalendarImageService:
                 content_type=content_type or "image/jpeg",
                 folder=cls.FOLDER,
             )
-        except Exception:
+        except Exception as exc:
+            if verbose:
+                print(f"[calendar-image] {bangumi_id}: failed: {exc}", flush=True)
             return ""
 
     @staticmethod

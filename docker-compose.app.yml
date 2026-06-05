@@ -5,6 +5,7 @@ services:
     env_file:
       - ${ENV_FILE:-.env.production}
     environment:
+      TZ: ${TZ:-Asia/Shanghai}
       RUN_MIGRATIONS: "true"
       COLLECT_STATIC: "true"
     extra_hosts:
@@ -22,6 +23,8 @@ services:
     restart: unless-stopped
     env_file:
       - ${ENV_FILE:-.env.production}
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     command: >
@@ -33,6 +36,8 @@ services:
     restart: unless-stopped
     env_file:
       - ${ENV_FILE:-.env.production}
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     command: celery -A config beat -l info

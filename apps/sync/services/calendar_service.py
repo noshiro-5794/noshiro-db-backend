@@ -46,6 +46,8 @@ class CalendarSyncService:
         item_count = 0
         synced_subject_count = 0
         failed_subject_count = 0
+        detail_synced_count = 0
+        detail_failed_count = 0
         calendar_entries = []
         valid_item_count = cls._count_calendar_items(data)
         sync_job_service.set_total(
@@ -93,6 +95,7 @@ class CalendarSyncService:
                     calendar_image_url = calendar_image_service.cache_cover(
                         bangumi_id=bangumi_id,
                         images=item.get("images"),
+                        verbose=verbose,
                     )
 
                     calendar_entries.append(
@@ -104,18 +107,14 @@ class CalendarSyncService:
                         )
                     )
 
-                    if sync_subject_details:
-                        manual_subject_sync_service.sync_by_bangumi_id(
-                            bangumi_id=bangumi_id,
-                        )
                     synced_subject_count += 1
                     sync_job_service.advance(
                         job_id=job_id,
                         synced=1,
-                        current_label=f"Synced calendar subject {bangumi_id}",
+                        current_label=f"Prepared calendar subject {bangumi_id}",
                     )
                     if verbose:
-                        print(f"[calendar] {bangumi_id}: synced", flush=True)
+                        print(f"[calendar] {bangumi_id}: prepared", flush=True)
                 except Exception:
                     failed_subject_count += 1
                     cls._record_error(bangumi_id=bangumi_id)
@@ -128,12 +127,46 @@ class CalendarSyncService:
                         print(f"[calendar] {bangumi_id}: failed", flush=True)
 
         cls._replace_calendar(calendar_entries=calendar_entries)
+        sync_job_service.set_total(
+            job_id=job_id,
+            total_count=item_count + (len(calendar_entries) if sync_subject_details else 0),
+            current_label="Calendar rows refreshed",
+        )
+
+        if sync_subject_details:
+            for calendar_entry in calendar_entries:
+                bangumi_id = calendar_entry.subject.id_source
+                try:
+                    if verbose:
+                        print(f"[calendar-detail] {bangumi_id}: start", flush=True)
+                    manual_subject_sync_service.sync_by_bangumi_id(
+                        bangumi_id=bangumi_id,
+                    )
+                    detail_synced_count += 1
+                    sync_job_service.advance(
+                        job_id=job_id,
+                        current_label=f"Synced calendar subject details {bangumi_id}",
+                    )
+                    if verbose:
+                        print(f"[calendar-detail] {bangumi_id}: synced", flush=True)
+                except Exception:
+                    detail_failed_count += 1
+                    cls._record_error(bangumi_id=bangumi_id)
+                    sync_job_service.advance(
+                        job_id=job_id,
+                        failed=1,
+                        current_label=f"Failed calendar subject details {bangumi_id}",
+                    )
+                    if verbose:
+                        print(f"[calendar-detail] {bangumi_id}: failed", flush=True)
 
         result = {
             "weekday_count": len(data),
             "item_count": item_count,
             "synced_subject_count": synced_subject_count,
             "failed_subject_count": failed_subject_count,
+            "detail_synced_count": detail_synced_count,
+            "detail_failed_count": detail_failed_count,
         }
         sync_job_service.mark_succeeded(
             job_id=job_id,
