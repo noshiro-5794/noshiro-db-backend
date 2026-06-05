@@ -25,6 +25,7 @@ class BangumiSubjectSyncQueuedResponseSerializer(serializers.Serializer):
     task_id = serializers.CharField()
     status = serializers.CharField()
     bangumi_id = serializers.IntegerField()
+    job_id = serializers.UUIDField()
 
 
 class SubjectResyncQueuedResponseSerializer(serializers.Serializer):
@@ -32,6 +33,7 @@ class SubjectResyncQueuedResponseSerializer(serializers.Serializer):
     task_id = serializers.CharField()
     status = serializers.CharField()
     subject_id = serializers.UUIDField()
+    job_id = serializers.UUIDField()
 
 
 class SubjectResyncResultResponseSerializer(serializers.Serializer):
@@ -75,6 +77,7 @@ class IncrementalSyncQueuedResponseSerializer(serializers.Serializer):
 
     task_id = serializers.CharField()
     status = serializers.CharField()
+    job_id = serializers.UUIDField()
 
 
 class IncrementalSyncStatusResponseSerializer(serializers.Serializer):
@@ -114,3 +117,29 @@ class CalendarSyncResultResponseSerializer(serializers.Serializer):
     item_count = serializers.IntegerField()
     synced_subject_count = serializers.IntegerField()
     failed_subject_count = serializers.IntegerField()
+
+
+class SyncJobResponseSerializer(serializers.Serializer):
+
+    id = serializers.UUIDField()
+    job_type = serializers.CharField()
+    status = serializers.CharField()
+    celery_task_id = serializers.CharField(allow_blank=True)
+    parameters = serializers.DictField()
+    result = serializers.DictField(allow_null=True)
+    error = serializers.CharField(allow_blank=True)
+    current_label = serializers.CharField(allow_blank=True)
+    total_count = serializers.IntegerField()
+    processed_count = serializers.IntegerField()
+    synced_count = serializers.IntegerField()
+    skipped_count = serializers.IntegerField()
+    failed_count = serializers.IntegerField()
+    started_at = serializers.DateTimeField(allow_null=True)
+    finished_at = serializers.DateTimeField(allow_null=True)
+    created_at = serializers.DateTimeField()
+    updated_at = serializers.DateTimeField()
+
+
+class SyncJobListResponseSerializer(serializers.Serializer):
+
+    jobs = SyncJobResponseSerializer(many=True)

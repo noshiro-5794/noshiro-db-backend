@@ -1,9 +1,9 @@
 import os
 import uuid
 
+from django.conf import settings
 from minio import Minio
 from minio.error import S3Error
-from django.conf import settings
 
 
 class MinioClient:
@@ -33,7 +33,7 @@ class MinioClient:
         file_obj,
         file_name=None,
         content_type=None,
-        folder="avatars",
+        folder="uploads",
     ):
         try:
             original_name = getattr(file_obj, "name", "")

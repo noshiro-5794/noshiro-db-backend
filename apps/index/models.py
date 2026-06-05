@@ -142,6 +142,7 @@ class CalendarSubject(models.Model):
     )
     weekday_en = models.CharField(max_length=16, blank=True)
     collection_doing = models.PositiveIntegerField(default=0)
+    image_url = models.URLField(max_length=1024, blank=True)
 
     class Meta:
         db_table = "calendar_subject"

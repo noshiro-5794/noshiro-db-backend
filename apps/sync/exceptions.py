@@ -29,3 +29,9 @@ class SyncTaskAlreadyRunning(SyncException):
 
     default_code = 31003
     default_detail = "sync task already running"
+
+
+class SyncJobNotFound(SyncException):
+
+    default_code = 31004
+    default_detail = "sync job not found"

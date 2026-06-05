@@ -25,7 +25,7 @@ class CalendarSubjectResponseSerializer(serializers.ModelSerializer):
     display_meta = serializers.SerializerMethodField()
     display_subtitle = serializers.SerializerMethodField()
     date = serializers.DateField(source="subject.date")
-    image_thumbnail = serializers.CharField(source="subject.image_thumbnail")
+    image_thumbnail = serializers.SerializerMethodField()
     platform = serializers.CharField(source="subject.platform")
     nsfw = serializers.BooleanField(source="subject.nsfw")
     doing = serializers.IntegerField(source="collection_doing")
@@ -53,3 +53,6 @@ class CalendarSubjectResponseSerializer(serializers.ModelSerializer):
 
     def get_display_subtitle(self, obj):
         return build_subject_display_subtitle(obj.subject)
+
+    def get_image_thumbnail(self, obj):
+        return obj.image_url or obj.subject.image_thumbnail

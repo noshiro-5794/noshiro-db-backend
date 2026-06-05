@@ -1,5 +1,6 @@
 from django.db.models import (
     Count,
+    Exists,
     FloatField,
     IntegerField,
     OuterRef,
@@ -17,6 +18,7 @@ from apps.index.models import (
     Subject,
     SubjectCharacterRelation,
     SubjectStaffRelation,
+    SubjectSubjectRelation,
 )
 
 
@@ -64,6 +66,22 @@ class SubjectSelector:
             ),
         )
 
+    @staticmethod
+    def with_subject_relations(qs):
+        outgoing_relations = SubjectSubjectRelation.objects.filter(
+            source_id=OuterRef("pk")
+        )
+        incoming_relations = SubjectSubjectRelation.objects.filter(
+            target_id=OuterRef("pk")
+        )
+
+        return qs.annotate(
+            has_outgoing_relation=Exists(outgoing_relations),
+            has_incoming_relation=Exists(incoming_relations),
+        ).filter(
+            Q(has_outgoing_relation=True) | Q(has_incoming_relation=True),
+        )
+
     @classmethod
     def list_subjects(
         cls,
@@ -81,6 +99,7 @@ class SubjectSelector:
         ordering="-updated_at",
     ):
         qs = cls.base_queryset().filter(subject_type__in=PRIMARY_SUBJECT_TYPES)
+        qs = cls.with_subject_relations(qs)
 
         if subject_type:
             qs = qs.filter(subject_type=subject_type)

@@ -14,6 +14,7 @@ from apps.sync.services.rate_limiter import rate_limiter
 from apps.sync.services.relation_service import relation_service
 from apps.sync.services.staff_service import staff_service
 from apps.sync.services.subject_service import subject_service
+from apps.sync.services.sync_job_service import sync_job_service
 
 
 @dataclass(frozen=True)
@@ -132,12 +133,26 @@ class IncrementalSyncService:
         return {"unlocked": updated}
 
     @classmethod
-    def sync_all(cls, *, batch_size: int | None = None, verbose: bool = False) -> dict:
+    def sync_all(
+        cls,
+        *,
+        batch_size: int | None = None,
+        job_id: str | None = None,
+        verbose: bool = False,
+    ) -> dict:
+        effective_batch_size = batch_size or settings.SYNC_INCREMENTAL_SUBJECT_BATCH_SIZE
+        sync_job_service.mark_running(
+            job_id=job_id,
+            total_count=len(cls.TASKS) * max(1, int(effective_batch_size)),
+            current_label="Starting incremental sync",
+        )
         return {
             "results": [
                 cls.sync_task(
                     task_name=task_name,
-                    batch_size=batch_size,
+                    batch_size=effective_batch_size,
+                    job_id=job_id,
+                    reset_job_total=False,
                     verbose=verbose,
                 )
                 for task_name in cls.TASKS.keys()
@@ -150,11 +165,18 @@ class IncrementalSyncService:
         *,
         task_name: str,
         batch_size: int | None = None,
+        job_id: str | None = None,
+        reset_job_total: bool = True,
         verbose: bool = False,
     ) -> dict:
         config = cls._get_config(task_name)
         batch_size = batch_size or settings.SYNC_INCREMENTAL_SUBJECT_BATCH_SIZE
         batch_size = max(1, int(batch_size))
+        sync_job_service.mark_running(
+            job_id=job_id,
+            total_count=batch_size if reset_job_total else None,
+            current_label=f"Starting {config.task_name}",
+        )
         start_id, end_id = cls._start_window(config, batch_size=batch_size)
         if verbose:
             print(
@@ -186,6 +208,13 @@ class IncrementalSyncService:
                     )
                 result["processed_count"] += 1
                 result[f"{outcome}_count"] += 1
+                sync_job_service.advance(
+                    job_id=job_id,
+                    synced=1 if outcome == "synced" else 0,
+                    skipped=1 if outcome == "skipped" else 0,
+                    failed=1 if outcome == "failed" else 0,
+                    current_label=f"{config.task_name}: {bangumi_id} {outcome}",
+                )
 
                 if outcome == "failed":
                     consecutive_errors += 1

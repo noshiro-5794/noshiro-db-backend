@@ -3,9 +3,11 @@ from django.db import transaction
 from apps.index.models import CalendarSubject
 from apps.sync.models import SyncError
 from apps.sync.providers.bangumi import bangumi_client
+from apps.sync.services.calendar_image_service import calendar_image_service
 from apps.sync.services.manual_sync_service import manual_subject_sync_service
 from apps.sync.services.rate_limiter import rate_limiter
 from apps.sync.services.subject_service import subject_service
+from apps.sync.services.sync_job_service import sync_job_service
 
 
 class CalendarSyncService:
@@ -17,22 +19,40 @@ class CalendarSyncService:
         cls,
         *,
         sync_subject_details: bool = True,
+        job_id: str | None = None,
         verbose: bool = False,
     ) -> dict:
+        sync_job_service.mark_running(
+            job_id=job_id,
+            total_count=0,
+            current_label="Fetching calendar",
+        )
         rate_limiter.acquire()
         data = bangumi_client.fetch_calendar()
         if not isinstance(data, list):
-            return {
+            result = {
                 "weekday_count": 0,
                 "item_count": 0,
                 "synced_subject_count": 0,
                 "failed_subject_count": 0,
             }
+            sync_job_service.mark_succeeded(
+                job_id=job_id,
+                result=result,
+                current_label="Calendar sync completed",
+            )
+            return result
 
         item_count = 0
         synced_subject_count = 0
         failed_subject_count = 0
         calendar_entries = []
+        valid_item_count = cls._count_calendar_items(data)
+        sync_job_service.set_total(
+            job_id=job_id,
+            total_count=valid_item_count,
+            current_label="Syncing calendar subjects",
+        )
 
         for weekday_group in data:
             if not isinstance(weekday_group, dict):
@@ -62,15 +82,25 @@ class CalendarSyncService:
                     rate_limiter.acquire()
                     subject = subject_service.upsert_subject(bangumi_id)
                     if subject is None:
+                        sync_job_service.advance(
+                            job_id=job_id,
+                            skipped=1,
+                            current_label=f"Skipped calendar subject {bangumi_id}",
+                        )
                         if verbose:
                             print(f"[calendar] {bangumi_id}: skipped", flush=True)
                         continue
+                    calendar_image_url = calendar_image_service.cache_cover(
+                        bangumi_id=bangumi_id,
+                        images=item.get("images"),
+                    )
 
                     calendar_entries.append(
                         CalendarSubject(
                             subject=subject,
                             weekday_en=weekday.get("en") or "",
                             collection_doing=collection_doing,
+                            image_url=calendar_image_url,
                         )
                     )
 
@@ -79,22 +109,54 @@ class CalendarSyncService:
                             bangumi_id=bangumi_id,
                         )
                     synced_subject_count += 1
+                    sync_job_service.advance(
+                        job_id=job_id,
+                        synced=1,
+                        current_label=f"Synced calendar subject {bangumi_id}",
+                    )
                     if verbose:
                         print(f"[calendar] {bangumi_id}: synced", flush=True)
                 except Exception:
                     failed_subject_count += 1
                     cls._record_error(bangumi_id=bangumi_id)
+                    sync_job_service.advance(
+                        job_id=job_id,
+                        failed=1,
+                        current_label=f"Failed calendar subject {bangumi_id}",
+                    )
                     if verbose:
                         print(f"[calendar] {bangumi_id}: failed", flush=True)
 
         cls._replace_calendar(calendar_entries=calendar_entries)
 
-        return {
+        result = {
             "weekday_count": len(data),
             "item_count": item_count,
             "synced_subject_count": synced_subject_count,
             "failed_subject_count": failed_subject_count,
         }
+        sync_job_service.mark_succeeded(
+            job_id=job_id,
+            result=result,
+            current_label="Calendar sync completed",
+        )
+        return result
+
+    @staticmethod
+    def _count_calendar_items(data: list) -> int:
+        total = 0
+        for weekday_group in data:
+            if not isinstance(weekday_group, dict):
+                continue
+            items = weekday_group.get("items") or []
+            if not isinstance(items, list):
+                continue
+            total += sum(
+                1
+                for item in items
+                if isinstance(item, dict) and isinstance(item.get("id"), int)
+            )
+        return total
 
     @staticmethod
     @transaction.atomic

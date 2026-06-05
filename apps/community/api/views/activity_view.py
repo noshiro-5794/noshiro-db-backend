@@ -7,6 +7,24 @@ from apps.core.pagination import DefaultPageNumberPagination
 from apps.users.selectors.public.public_profile_selector import PublicProfileSelector
 
 
+class PublicActivityListView(APIView):
+
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        qs = ActivitySelector.list_public_activities(
+            activity_type=request.query_params.get("activity_type"),
+            ordering=request.query_params.get("ordering", "-created_at"),
+            viewer=request.user,
+        )
+
+        paginator = DefaultPageNumberPagination()
+        page = paginator.paginate_queryset(qs, request, view=self)
+        serializer = ActivityResponseSerializer(page, many=True)
+
+        return paginator.get_paginated_response(serializer.data)
+
+
 class MyActivityListView(APIView):
 
     permission_classes = [IsAuthenticated]

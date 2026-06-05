@@ -171,9 +171,11 @@ GET  /api/sync/incremental/status/
 POST /api/sync/incremental/run/
 POST /api/sync/calendar/run/
 POST /api/sync/subjects/{subject_id}/resync/
+GET  /api/sync/jobs/
+GET  /api/sync/jobs/{job_id}/
 ```
 
-The frontend should not show sync controls to non-staff users. The backend still enforces staff permissions.
+The frontend should not show sync controls to non-staff users. The backend still enforces staff permissions. Async sync responses include `job_id`; poll `GET /api/sync/jobs/{job_id}/` for progress.
 
 ## Modules
 

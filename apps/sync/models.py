@@ -1,3 +1,5 @@
+import uuid
+
 from django.db import models
 
 
@@ -61,3 +63,52 @@ class SyncError(models.Model):
 
     def __str__(self):
         return f"{self.task_name}:{self.entity_id}"
+
+
+class SyncJob(models.Model):
+
+    class JobType(models.TextChoices):
+        SUBJECT_BANGUMI = "subject_bangumi", "Subject by Bangumi"
+        SUBJECT_RESYNC = "subject_resync", "Subject resync"
+        CALENDAR = "calendar", "Calendar"
+        INCREMENTAL = "incremental", "Incremental"
+
+    class Status(models.TextChoices):
+        QUEUED = "queued", "Queued"
+        RUNNING = "running", "Running"
+        SUCCEEDED = "succeeded", "Succeeded"
+        FAILED = "failed", "Failed"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    job_type = models.CharField(max_length=64, choices=JobType.choices)
+    status = models.CharField(
+        max_length=32,
+        choices=Status.choices,
+        default=Status.QUEUED,
+    )
+    celery_task_id = models.CharField(max_length=256, blank=True)
+    parameters = models.JSONField(default=dict, blank=True)
+    result = models.JSONField(null=True, blank=True)
+    error = models.TextField(blank=True)
+    current_label = models.CharField(max_length=256, blank=True)
+    total_count = models.IntegerField(default=0)
+    processed_count = models.IntegerField(default=0)
+    synced_count = models.IntegerField(default=0)
+    skipped_count = models.IntegerField(default=0)
+    failed_count = models.IntegerField(default=0)
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "sync_job"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["status", "created_at"], name="idx_sync_job_status_created"),
+            models.Index(fields=["job_type", "created_at"], name="idx_sync_job_type_created"),
+            models.Index(fields=["celery_task_id"], name="idx_sync_job_celery_task"),
+        ]
+
+    def __str__(self):
+        return f"{self.job_type}:{self.status}:{self.id}"

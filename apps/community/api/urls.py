@@ -3,6 +3,7 @@ from django.urls import path
 from apps.community.api.views.activity_view import (
     MyActivityListView,
     MyFeedView,
+    PublicActivityListView,
     PublicUserActivityListView,
 )
 from apps.community.api.views.comment_view import (
@@ -92,6 +93,11 @@ urlpatterns = [
         "me/mutes/<int:target_user_id>/",
         MyMuteToggleView.as_view(),
         name="community-my-mute-toggle",
+    ),
+    path(
+        "activities/",
+        PublicActivityListView.as_view(),
+        name="community-public-activity-list",
     ),
     path(
         "me/activities/",

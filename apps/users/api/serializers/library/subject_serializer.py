@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from apps.index.api.serializers.subject_serializer import SubjectListResponseSerializer
 from apps.users.models import UserSubject
 
 
@@ -139,16 +140,7 @@ class UserSubjectListResponseSerializer(serializers.ModelSerializer):
         ]
 
     def get_subject(self, obj):
-        subject = obj.subject
-        return {
-            "id": subject.id,
-            "subject_type": subject.subject_type,
-            "title": subject.title,
-            "title_cn": subject.title_cn,
-            "date": subject.date,
-            "image_thumbnail": subject.image_thumbnail,
-            "nsfw": subject.nsfw,
-        }
+        return SubjectListResponseSerializer(obj.subject, context=self.context).data
 
     def get_tags(self, obj):
         relations = getattr(obj, "tag_relations", None)
@@ -209,15 +201,7 @@ class MySubjectContextResponseSerializer(serializers.Serializer):
             "is_public": user_subject.is_public,
             "created_at": user_subject.created_at,
             "updated_at": user_subject.updated_at,
-            "subject": {
-                "id": subject.id,
-                "subject_type": subject.subject_type,
-                "title": subject.title,
-                "title_cn": subject.title_cn,
-                "date": subject.date,
-                "image_thumbnail": subject.image_thumbnail,
-                "nsfw": subject.nsfw,
-            },
+            "subject": SubjectListResponseSerializer(subject, context=self.context).data,
         }
 
     def get_tags(self, obj):

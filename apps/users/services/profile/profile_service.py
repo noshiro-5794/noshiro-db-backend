@@ -2,7 +2,7 @@ from django.db import IntegrityError, transaction
 
 from apps.users.models import User, UserProfile
 from apps.users.exceptions import AvatarUploadFailed
-from apps.users.storage.minio_client import minio_client
+from apps.core.storage.minio_client import minio_client
 
 
 class ProfileService:

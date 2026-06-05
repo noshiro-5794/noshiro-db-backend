@@ -54,6 +54,12 @@ Start the stack:
 ENV_FILE=.env.production docker compose -f docker-compose.app.yml --env-file .env.production up -d --build
 ```
 
+After code changes that affect Celery tasks or Django models, recreate all app containers:
+
+```bash
+ENV_FILE=.env.production docker compose -f docker-compose.app.yml --env-file .env.production up -d --build --force-recreate
+```
+
 View logs:
 
 ```bash

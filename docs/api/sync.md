@@ -2,7 +2,9 @@
 
 Sync APIs are staff-only. Use [Auth](./users-auth.md) to set `ACCESS_TOKEN` for a staff user.
 
-Most write APIs default to async Celery dispatch.
+Most write APIs default to async Celery dispatch. Async responses include both a Celery `task_id` and a backend `job_id`.
+
+Use `job_id` for frontend progress polling. `task_id` is mainly an internal Celery identifier.
 
 ## Incremental Status
 
@@ -40,6 +42,16 @@ incremental_staff
 
 Omit `task_name` to run all configured incremental tasks.
 
+Async response shape:
+
+```json
+{
+  "task_id": "celery-task-id",
+  "job_id": "sync-job-uuid",
+  "status": "queued"
+}
+```
+
 ## Run Calendar Sync
 
 ```bash
@@ -68,6 +80,50 @@ curl -s -X POST "$BASE_URL/api/sync/subjects/$SUBJECT_ID/resync/" \
 ```
 
 Single-subject sync refreshes the subject, episodes, staff, characters, and direct relations. It does not recursively sync relation trees.
+
+## Sync Jobs
+
+List recent jobs:
+
+```bash
+curl -s -X GET "$BASE_URL/api/sync/jobs/?limit=20" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" | jq
+```
+
+Optional filters:
+
+```text
+status=queued|running|succeeded|failed
+job_type=subject_bangumi|subject_resync|calendar|incremental
+limit=1..100
+```
+
+Get one job:
+
+```bash
+JOB_ID="sync-job-uuid"
+
+curl -s -X GET "$BASE_URL/api/sync/jobs/$JOB_ID/" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" | jq
+```
+
+Job fields:
+
+```text
+status           queued / running / succeeded / failed
+celery_task_id   Celery task identifier, useful for logs
+parameters       request snapshot
+result           final result when completed
+error            failure message
+current_label    current progress label
+total_count      planned work count when known
+processed_count  completed work count
+synced_count     successful sync count
+skipped_count    skipped count
+failed_count     failed count
+```
+
+Celery workers do not scan the `sync_job` table. A job runs only when the API dispatches the corresponding Celery task.
 
 ## Local Command Equivalents
 

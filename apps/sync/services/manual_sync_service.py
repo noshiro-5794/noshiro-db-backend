@@ -9,6 +9,7 @@ from apps.sync.services.relation_service import relation_service
 from apps.sync.services.rate_limiter import rate_limiter
 from apps.sync.services.staff_service import staff_service
 from apps.sync.services.subject_service import subject_service
+from apps.sync.services.sync_job_service import sync_job_service
 
 
 @dataclass(frozen=True)
@@ -38,7 +39,7 @@ class ManualSubjectSyncResult:
 class ManualSubjectSyncService:
 
     @staticmethod
-    def sync_by_uuid(*, subject_id: UUID | str) -> dict:
+    def sync_by_uuid(*, subject_id: UUID | str, job_id: UUID | str | None = None) -> dict:
         try:
             subject = Subject.objects.get(id=subject_id)
         except Subject.DoesNotExist:
@@ -47,31 +48,65 @@ class ManualSubjectSyncService:
         bangumi_id = ManualSubjectSyncService._get_bangumi_subject_id(subject)
         return ManualSubjectSyncService.sync_by_bangumi_id(
             bangumi_id=bangumi_id,
+            job_id=job_id,
         )
 
     @staticmethod
-    def sync_by_bangumi_id(*, bangumi_id: int) -> dict:
+    def sync_by_bangumi_id(*, bangumi_id: int, job_id: UUID | str | None = None) -> dict:
+        sync_job_service.mark_running(
+            job_id=job_id,
+            total_count=4,
+            current_label=f"Fetching subject {bangumi_id}",
+        )
         rate_limiter.acquire()
         subject = subject_service.upsert_subject(bangumi_id)
         if subject is None:
             raise SyncSubjectNotFound()
+        sync_job_service.advance(
+            job_id=job_id,
+            synced=1,
+            current_label=f"Synced subject {bangumi_id}",
+        )
 
         rate_limiter.acquire()
+        sync_job_service.advance(
+            job_id=job_id,
+            current_label=f"Syncing episodes for {bangumi_id}",
+        )
         episode_service.sync_subject_episodes(bangumi_id)
 
         rate_limiter.acquire()
+        sync_job_service.advance(
+            job_id=job_id,
+            current_label=f"Syncing relations for {bangumi_id}",
+        )
         relations = relation_service.sync_all_relations(bangumi_id)
 
         staff_ids = relations["staffs"]
         character_ids = relations["characters"]
+        sync_job_service.set_total(
+            job_id=job_id,
+            total_count=3 + len(character_ids) + len(staff_ids),
+            current_label="Syncing characters and staff",
+        )
 
         for character_id in character_ids:
             rate_limiter.acquire()
             character_service.upsert_character(int(character_id))
+            sync_job_service.advance(
+                job_id=job_id,
+                synced=1,
+                current_label=f"Synced character {character_id}",
+            )
 
         for staff_id in staff_ids:
             rate_limiter.acquire()
             staff_service.upsert_staff(int(staff_id))
+            sync_job_service.advance(
+                job_id=job_id,
+                synced=1,
+                current_label=f"Synced staff {staff_id}",
+            )
 
         result = ManualSubjectSyncResult(
             subject_id=str(subject.id),
@@ -83,7 +118,13 @@ class ManualSubjectSyncService:
             character_count=len(character_ids),
             related_subject_count=len(relations["subjects"]),
         )
-        return result.as_dict()
+        data = result.as_dict()
+        sync_job_service.mark_succeeded(
+            job_id=job_id,
+            result=data,
+            current_label="Subject sync completed",
+        )
+        return data
 
     @staticmethod
     def _get_bangumi_subject_id(subject: Subject) -> int:

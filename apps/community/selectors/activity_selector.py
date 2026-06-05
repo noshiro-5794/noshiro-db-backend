@@ -143,6 +143,49 @@ class ActivitySelector:
         return qs.order_by(ordering, "-id")
 
     @classmethod
+    def list_public_activities(
+        cls,
+        *,
+        activity_type=None,
+        ordering="-created_at",
+        viewer=None,
+    ):
+        qs = cls.base_queryset().filter(cls.public_visibility_filter())
+
+        if cls._is_authenticated_user(viewer):
+            blocked_user_ids = UserBlock.objects.filter(
+                user=viewer,
+            ).values("blocked_user_id")
+            blocking_user_ids = UserBlock.objects.filter(
+                blocked_user=viewer,
+            ).values("user_id")
+            muted_user_ids = UserMute.objects.filter(
+                user=viewer,
+            ).values("muted_user_id")
+            qs = (
+                qs.exclude(user_id__in=Subquery(blocked_user_ids))
+                .exclude(user_id__in=Subquery(blocking_user_ids))
+                .exclude(user_id__in=Subquery(muted_user_ids))
+            )
+
+        qs = cls._annotate_community_state(qs, viewer=viewer)
+
+        if activity_type:
+            qs = qs.filter(activity_type=activity_type)
+
+        allowed_ordering = {
+            "created_at",
+            "-created_at",
+            "id",
+            "-id",
+        }
+
+        if ordering not in allowed_ordering:
+            ordering = "-created_at"
+
+        return qs.order_by(ordering, "-id")
+
+    @classmethod
     def list_my_feed(
         cls,
         *,

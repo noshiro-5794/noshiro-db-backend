@@ -5,6 +5,8 @@ from apps.sync.api.views.manual_sync_view import (
     CalendarSyncRunView,
     IncrementalSyncRunView,
     IncrementalSyncStatusView,
+    SyncJobDetailView,
+    SyncJobListView,
     SubjectResyncView,
 )
 
@@ -24,6 +26,16 @@ urlpatterns = [
         "incremental/status/",
         IncrementalSyncStatusView.as_view(),
         name="sync-incremental-status",
+    ),
+    path(
+        "jobs/",
+        SyncJobListView.as_view(),
+        name="sync-job-list",
+    ),
+    path(
+        "jobs/<uuid:job_id>/",
+        SyncJobDetailView.as_view(),
+        name="sync-job-detail",
     ),
     path(
         "incremental/run/",

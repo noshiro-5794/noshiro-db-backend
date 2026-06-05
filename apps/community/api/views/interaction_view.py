@@ -60,6 +60,7 @@ class CommunityBookmarkListToggleView(APIView):
         qs = CommunityBookmarkSelector.list_my_bookmarks(
             user=request.user,
             target_type=target_type,
+            keyword=request.query_params.get("keyword"),
         )
 
         paginator = DefaultPageNumberPagination()
