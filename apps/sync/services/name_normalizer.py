@@ -25,7 +25,16 @@ class NameNormalizer:
             self.cache[name] = mapping.internal_name
             return mapping.internal_name
 
-        normalized_name = ai_client.normalize_name(name)
+        try:
+            normalized_name = ai_client.normalize_name(name)
+        except Exception as exc:
+            normalized_name = name.strip()
+            print(
+                f"[name-normalizer] fallback to original name={name!r}: {exc}",
+                flush=True,
+            )
+            return normalized_name
+
         if not normalized_name:
             raise RuntimeError("Failed to normalize name")
 
