@@ -16,9 +16,15 @@ RUN pip install --upgrade pip \
 
 COPY . .
 
+RUN addgroup --system app \
+    && adduser --system --ingroup app app \
+    && chown -R app:app /app
+
 RUN chmod +x docker/entrypoint.sh
 
 EXPOSE 8008
+
+USER app
 
 ENTRYPOINT ["docker/entrypoint.sh"]
 CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8008", "--workers", "3", "--timeout", "120"]
