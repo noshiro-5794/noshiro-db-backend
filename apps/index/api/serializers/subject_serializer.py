@@ -80,6 +80,12 @@ class SubjectListQuerySerializer(serializers.Serializer):
         allow_blank=True,
         trim_whitespace=True,
     )
+    source_id = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        trim_whitespace=True,
+        max_length=64,
+    )
     date_from = serializers.DateField(required=False)
     date_to = serializers.DateField(required=False)
     episodes_min = serializers.IntegerField(required=False, min_value=0)

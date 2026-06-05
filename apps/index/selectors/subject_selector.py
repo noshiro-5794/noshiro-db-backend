@@ -92,6 +92,7 @@ class SubjectSelector:
         year=None,
         season=None,
         platform=None,
+        source_id=None,
         date_from=None,
         date_to=None,
         episodes_min=None,
@@ -117,6 +118,11 @@ class SubjectSelector:
             platform = platform.strip()
             if platform:
                 qs = qs.filter(platform__icontains=platform)
+
+        if source_id:
+            source_id = source_id.strip()
+            if source_id:
+                qs = qs.filter(id_source=source_id)
 
         if date_from:
             qs = qs.filter(date__gte=date_from)
