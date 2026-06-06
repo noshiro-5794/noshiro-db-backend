@@ -2,6 +2,7 @@ from rest_framework import status
 from rest_framework.permissions import IsAdminUser
 from rest_framework.views import APIView
 
+from apps.core.pagination import DefaultPageNumberPagination
 from apps.core.response import success_response
 from apps.sync.api.serializers.manual_sync_serializer import (
     BangumiSubjectSyncQueuedResponseSerializer,
@@ -12,7 +13,6 @@ from apps.sync.api.serializers.manual_sync_serializer import (
     IncrementalSyncResultResponseSerializer,
     IncrementalSyncRunRequestSerializer,
     IncrementalSyncStatusResponseSerializer,
-    SyncJobListResponseSerializer,
     SyncJobResponseSerializer,
     SubjectResyncQueuedResponseSerializer,
     SubjectResyncRequestSerializer,
@@ -277,17 +277,15 @@ class SyncJobListView(APIView):
     permission_classes = [IsAdminUser]
 
     def get(self, request):
-        try:
-            limit = int(request.query_params.get("limit", 20))
-        except (TypeError, ValueError):
-            limit = 20
-        jobs = sync_job_service.list_recent(
-            limit=limit,
+        qs = sync_job_service.list_queryset(
             status=request.query_params.get("status"),
             job_type=request.query_params.get("job_type"),
         )
-        serializer = SyncJobListResponseSerializer({"jobs": jobs})
-        return success_response(data=serializer.data)
+
+        paginator = DefaultPageNumberPagination()
+        page = paginator.paginate_queryset(qs, request, view=self)
+        serializer = SyncJobResponseSerializer(page, many=True)
+        return paginator.get_paginated_response(serializer.data)
 
 
 class SyncJobDetailView(APIView):

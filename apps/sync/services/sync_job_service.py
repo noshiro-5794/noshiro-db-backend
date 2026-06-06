@@ -113,6 +113,19 @@ class SyncJobService:
             raise SyncJobNotFound()
 
     @staticmethod
+    def list_queryset(
+        *,
+        status: str | None = None,
+        job_type: str | None = None,
+    ):
+        qs = SyncJob.objects.all()
+        if status:
+            qs = qs.filter(status=status)
+        if job_type:
+            qs = qs.filter(job_type=job_type)
+        return qs
+
+    @staticmethod
     def list_recent(
         *,
         limit: int = 20,
@@ -120,12 +133,7 @@ class SyncJobService:
         job_type: str | None = None,
     ):
         limit = max(1, min(int(limit), 100))
-        qs = SyncJob.objects.all()
-        if status:
-            qs = qs.filter(status=status)
-        if job_type:
-            qs = qs.filter(job_type=job_type)
-        return qs[:limit]
+        return SyncJobService.list_queryset(status=status, job_type=job_type)[:limit]
 
 
 sync_job_service = SyncJobService()
