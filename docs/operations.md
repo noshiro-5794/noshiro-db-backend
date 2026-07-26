@@ -5,19 +5,19 @@
 API server:
 
 ```bash
-./venv/bin/python manage.py runserver 0.0.0.0:8008
+uv run python src/manage.py runserver 0.0.0.0:8008
 ```
 
 Celery worker:
 
 ```bash
-celery -A config worker -l info
+uv run celery --workdir src -A config.celery:app worker -l info
 ```
 
 Celery Beat:
 
 ```bash
-celery -A config beat -l info
+uv run celery --workdir src -A config.celery:app beat -l info
 ```
 
 Beat is required for scheduled sync jobs. Stop Beat before a large manual full sync if overlap is not desired.
@@ -33,6 +33,7 @@ cp .env.production.example .env.production
 Update `.env.production`:
 
 ```text
+# Required in production
 DJANGO_SECRET_KEY
 DJANGO_ALLOWED_HOSTS
 CORS_ALLOWED_ORIGINS
@@ -40,13 +41,22 @@ CSRF_TRUSTED_ORIGINS
 DATABASE_URL
 CELERY_BROKER_URL
 CELERY_RESULT_BACKEND
+CACHE_URL
 MINIO_ENDPOINT
 MINIO_ACCESS_KEY
 MINIO_SECRET_KEY
+MINIO_BUCKET
+MINIO_PUBLIC_URL
 RESEND_API_KEY
+
+# Optional provider credentials
 BANGUMI_API_KEY
 AI_AGENT_API_KEY
 ```
+
+Production startup requires PostgreSQL and Redis cache, and rejects missing
+Celery/Resend/MinIO configuration, `JWT_REFRESH_COOKIE_SECURE=False`, enabled
+hCaptcha without a secret, and non-positive timeout or batch settings.
 
 Start the stack:
 
@@ -71,13 +81,17 @@ ENV_FILE=.env.production docker compose -f docker-compose.app.yml --env-file .en
 Run management commands:
 
 ```bash
-ENV_FILE=.env.production docker compose -f docker-compose.app.yml --env-file .env.production exec web python manage.py check
-ENV_FILE=.env.production docker compose -f docker-compose.app.yml --env-file .env.production exec web python manage.py migrate
-ENV_FILE=.env.production docker compose -f docker-compose.app.yml --env-file .env.production exec web python manage.py sync_calendar
-ENV_FILE=.env.production docker compose -f docker-compose.app.yml --env-file .env.production exec web python manage.py sync_subject --bangumi-id 515759
+ENV_FILE=.env.production docker compose -f docker-compose.app.yml --env-file .env.production exec web python /app/src/manage.py check
+ENV_FILE=.env.production docker compose -f docker-compose.app.yml --env-file .env.production exec web python /app/src/manage.py migrate
+ENV_FILE=.env.production docker compose -f docker-compose.app.yml --env-file .env.production exec web python /app/src/manage.py sync_calendar
+ENV_FILE=.env.production docker compose -f docker-compose.app.yml --env-file .env.production exec web python /app/src/manage.py sync_subject --bangumi-id 515759
 ```
 
 The `web` service runs migrations and `collectstatic` on startup. The `worker` and `beat` services share the same image and environment.
+
+Take the normal PostgreSQL backup before deploying migrations. Data-validation
+migrations stop and report conflicting row IDs instead of deleting or guessing
+how to repair existing records.
 
 `docker-compose.app.yml` only starts:
 
@@ -108,36 +122,43 @@ SYNC_INCREMENTAL_CRON_MINUTE
 SYNC_INCREMENTAL_SUBJECT_BATCH_SIZE
 SYNC_INCREMENTAL_MAX_CONSECUTIVE_ERRORS
 SYNC_INCREMENTAL_MAX_CONSECUTIVE_SKIPS
+BANGUMI_RATE_LIMIT_INTERVAL
+BANGUMI_IMAGE_ALLOWED_HOSTS
+BANGUMI_IMAGE_MAX_BYTES
 ```
+
+`BANGUMI_IMAGE_ALLOWED_HOSTS` is a comma-separated allowlist. Calendar cover
+downloads reject other hosts, redirects, non-HTTP URLs, non-image responses,
+and payloads larger than `BANGUMI_IMAGE_MAX_BYTES`.
 
 ## Management Commands
 
 Full sync:
 
 ```bash
-./venv/bin/python manage.py full_sync
+uv run python src/manage.py full_sync
 ```
 
 Single subject sync:
 
 ```bash
-./venv/bin/python manage.py sync_subject --uuid "$SUBJECT_ID"
-./venv/bin/python manage.py sync_subject --bangumi-id 123
+uv run python src/manage.py sync_subject --uuid "$SUBJECT_ID"
+uv run python src/manage.py sync_subject --bangumi-id 123
 ```
 
 Incremental sync:
 
 ```bash
-./venv/bin/python manage.py incremental_sync --status
-./venv/bin/python manage.py incremental_sync --batch-size 10
-./venv/bin/python manage.py incremental_sync --task incremental_subject --batch-size 10
+uv run python src/manage.py incremental_sync --status
+uv run python src/manage.py incremental_sync --batch-size 10
+uv run python src/manage.py incremental_sync --task incremental_subject --batch-size 10
 ```
 
 Calendar sync:
 
 ```bash
-./venv/bin/python manage.py sync_calendar
-./venv/bin/python manage.py sync_calendar --skip-subject-details
+uv run python src/manage.py sync_calendar
+uv run python src/manage.py sync_calendar --skip-subject-details
 ```
 
 ## Staff Sync APIs
@@ -155,15 +176,22 @@ Most sync API writes default to async Celery dispatch. Use `run_async=false` onl
 
 ## Verification
 
+Tests use the PostgreSQL database configured by `TEST_DATABASE_URL`. Its
+database name must end with `_test`; never point it at a development or
+production database.
+
 Run before committing:
 
 ```bash
-./venv/bin/python manage.py check
-./venv/bin/python manage.py makemigrations --check --dry-run
+uv run ruff check .
+uv run ruff format --check src tests
+uv run pytest
+uv run python src/manage.py check
+uv run python src/manage.py makemigrations --check --dry-run
 ```
 
 Compile changed apps when useful:
 
 ```bash
-./venv/bin/python -m compileall apps
+uv run python -m compileall src/apps src/config
 ```

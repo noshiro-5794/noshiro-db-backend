@@ -17,7 +17,7 @@ Implemented modules:
 
 ## Stack
 
-- Python 3.11
+- Python 3.13.14
 - Django 5.2
 - Django REST Framework
 - PostgreSQL
@@ -29,16 +29,22 @@ Implemented modules:
 ## Structure
 
 ```text
-apps/
-  core/       shared response envelope, pagination, exceptions, handlers
-  users/      accounts, profiles, user library, reviews, collections
-  community/  social graph, activities, posts, comments, interactions
-  index/      public catalog models and APIs
-  sync/       Bangumi providers, sync services, management commands, tasks
-config/
-  settings/   split Django settings
+src/
+  manage.py   Django management entrypoint
+  apps/
+    users/      accounts, profiles, user library, reviews, collections
+    community/  social graph, activities, posts, comments, interactions
+    index/      public catalog models and APIs
+    sync/       Bangumi providers, sync services, management commands, tasks
+  config/
+    settings/   base and environment-specific Django settings
+  shared/
+    api/        shared API responses, pagination, and exception handling
+  integrations/
+    storage/    shared object-storage adapters
+docker/       container entrypoint
 docs/
-  api/        frontend-facing API documentation
+  api/          frontend-facing API documentation
 ```
 
 Layering convention:
@@ -54,18 +60,28 @@ providers         external service clients
 
 ## Local Setup
 
-Create and activate a virtual environment:
+Install uv 0.11.31, then install the project Python version and create the
+locked environment:
 
 ```bash
-python -m venv venv
-source venv/bin/activate
+uv python install 3.13.14
+uv sync --frozen
 ```
 
-Install dependencies:
+`pyproject.toml` declares direct dependencies and `uv.lock` pins the complete
+dependency graph. Commit both files whenever dependencies change.
+
+Dependency workflow:
 
 ```bash
-pip install -r requirements.txt
+uv add package-name
+uv add --dev tool-name
+uv lock --upgrade
+uv sync --frozen
 ```
+
+Application commands run through `uv run`; manually activating `.venv` is not
+required.
 
 Create `.env`:
 
@@ -73,16 +89,25 @@ Create `.env`:
 cp .env.example .env
 ```
 
+`TEST_DATABASE_URL` must point to a dedicated PostgreSQL database whose name
+ends with `_test`. The configured role must be able to create and drop that
+test database when pytest starts and finishes.
+
 Run migrations:
 
 ```bash
-./venv/bin/python manage.py migrate
+uv run python src/manage.py migrate
 ```
+
+The current migrations validate source identities, community target invariants,
+sync counters, and legacy watch-date strings before changing constraints or
+column types. A validation failure lists the affected row IDs and leaves the
+data unchanged.
 
 Start the API server:
 
 ```bash
-./venv/bin/python manage.py runserver 0.0.0.0:8008
+uv run python src/manage.py runserver 0.0.0.0:8008
 ```
 
 ## Runtime Processes
@@ -92,19 +117,19 @@ For local development, run the processes you need in separate terminals or tmux 
 API:
 
 ```bash
-./venv/bin/python manage.py runserver 0.0.0.0:8008
+uv run python src/manage.py runserver 0.0.0.0:8008
 ```
 
 Celery worker:
 
 ```bash
-celery -A config worker -l info
+uv run celery --workdir src -A config.celery:app worker -l info
 ```
 
 Celery Beat:
 
 ```bash
-celery -A config beat -l info
+uv run celery --workdir src -A config.celery:app beat -l info
 ```
 
 Beat enables scheduled jobs. Stop Beat before running large manual full sync operations if you want to avoid overlap with scheduled sync.
@@ -126,7 +151,10 @@ Create a production environment file:
 cp .env.production.example .env.production
 ```
 
-Edit `.env.production` with real secrets, domains, MinIO credentials, and API keys. Then build and start:
+Edit `.env.production` with real secrets, domains, MinIO credentials, and API
+keys. Production settings fail fast when PostgreSQL, Redis cache, Celery,
+Resend, secure refresh cookies, or MinIO are not configured. Then build and
+start:
 
 ```bash
 ENV_FILE=.env.production docker compose -f docker-compose.app.yml --env-file .env.production up -d --build
@@ -147,14 +175,17 @@ For production, put Nginx or Caddy in front of `web` and forward HTTPS requests 
 Run:
 
 ```bash
-./venv/bin/python manage.py check
-./venv/bin/python manage.py makemigrations --check --dry-run
+uv run ruff check .
+uv run ruff format --check src tests
+uv run pytest
+uv run python src/manage.py check
+uv run python src/manage.py makemigrations --check --dry-run
 ```
 
 Compile changed apps when needed:
 
 ```bash
-./venv/bin/python -m compileall apps
+uv run python -m compileall src/apps src/config
 ```
 
 ## Documentation
@@ -173,29 +204,29 @@ The API documentation is written for frontend implementation and includes endpoi
 Full sync:
 
 ```bash
-./venv/bin/python manage.py full_sync
+uv run python src/manage.py full_sync
 ```
 
 Single subject sync:
 
 ```bash
-./venv/bin/python manage.py sync_subject --uuid "$SUBJECT_ID"
-./venv/bin/python manage.py sync_subject --bangumi-id 123
+uv run python src/manage.py sync_subject --uuid "$SUBJECT_ID"
+uv run python src/manage.py sync_subject --bangumi-id 123
 ```
 
 Incremental sync:
 
 ```bash
-./venv/bin/python manage.py incremental_sync --status
-./venv/bin/python manage.py incremental_sync --batch-size 10
-./venv/bin/python manage.py incremental_sync --task incremental_subject --batch-size 10
+uv run python src/manage.py incremental_sync --status
+uv run python src/manage.py incremental_sync --batch-size 10
+uv run python src/manage.py incremental_sync --task incremental_subject --batch-size 10
 ```
 
 Calendar sync:
 
 ```bash
-./venv/bin/python manage.py sync_calendar
-./venv/bin/python manage.py sync_calendar --skip-subject-details
+uv run python src/manage.py sync_calendar
+uv run python src/manage.py sync_calendar --skip-subject-details
 ```
 
 ## License

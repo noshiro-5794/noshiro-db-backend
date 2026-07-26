@@ -66,6 +66,10 @@ curl -s -X POST "$BASE_URL/api/sync/calendar/run/" \
 
 Calendar sync refreshes daily broadcast data. When `sync_subject_details=true`, related calendar subjects are also synchronized.
 
+Synchronous result fields include `weekday_count`, `item_count`,
+`synced_subject_count`, `failed_subject_count`, `detail_synced_count`, and
+`detail_failed_count`.
+
 ## Resync One Subject
 
 ```bash
@@ -86,7 +90,7 @@ Single-subject sync refreshes the subject, episodes, staff, characters, and dire
 List recent jobs:
 
 ```bash
-curl -s -X GET "$BASE_URL/api/sync/jobs/?limit=20" \
+curl -s -X GET "$BASE_URL/api/sync/jobs/?page=1&page_size=20" \
   -H "Authorization: Bearer $ACCESS_TOKEN" | jq
 ```
 
@@ -95,7 +99,8 @@ Optional filters:
 ```text
 status=queued|running|succeeded|failed
 job_type=subject_bangumi|subject_resync|calendar|incremental
-limit=1..100
+page=1..
+page_size=1..64
 ```
 
 Get one job:
@@ -128,8 +133,8 @@ Celery workers do not scan the `sync_job` table. A job runs only when the API di
 ## Local Command Equivalents
 
 ```bash
-./venv/bin/python manage.py incremental_sync --status
-./venv/bin/python manage.py incremental_sync --batch-size 10
-./venv/bin/python manage.py sync_calendar
-./venv/bin/python manage.py sync_subject --uuid "$SUBJECT_ID"
+uv run python src/manage.py incremental_sync --status
+uv run python src/manage.py incremental_sync --batch-size 10
+uv run python src/manage.py sync_calendar
+uv run python src/manage.py sync_subject --uuid "$SUBJECT_ID"
 ```

@@ -46,9 +46,16 @@ Filters:
 ```text
 keyword
 subject_type=anime|galgame
+nsfw
+year
+season=winter|spring|summer|fall
+platform
+source
+source_id
 date_from
 date_to
-min_rating
+episodes_min
+episodes_max
 ordering
 ```
 

@@ -1,31 +1,52 @@
-PYTHON ?= ./venv/bin/python
-CELERY ?= ./venv/bin/celery
+UV ?= uv
+RUN ?= $(UV) run
+MANAGE ?= $(RUN) python src/manage.py
 HOST ?= 0.0.0.0
 PORT ?= 8008
 
-.PHONY: check migrations migrate run worker beat shell incremental-status
+.PHONY: sync lock upgrade format lint test check migrations migrate run worker beat shell incremental-status
 
-check:
-	$(PYTHON) manage.py check
-	$(PYTHON) manage.py makemigrations --check --dry-run
+sync:
+	$(UV) sync --frozen
+
+lock:
+	$(UV) lock
+
+upgrade:
+	$(UV) lock --upgrade
+	$(UV) sync
+
+format:
+	$(RUN) ruff format src tests
+
+lint:
+	$(RUN) ruff check .
+	$(RUN) ruff format --check src tests
+
+test:
+	$(RUN) pytest
+
+check: lint test
+	$(MANAGE) check
+	$(MANAGE) makemigrations --check --dry-run
 
 migrations:
-	$(PYTHON) manage.py makemigrations
+	$(MANAGE) makemigrations
 
 migrate:
-	$(PYTHON) manage.py migrate
+	$(MANAGE) migrate
 
 run:
-	$(PYTHON) manage.py runserver $(HOST):$(PORT)
+	$(MANAGE) runserver $(HOST):$(PORT)
 
 worker:
-	$(CELERY) -A config worker -l info
+	$(RUN) celery --workdir src -A config.celery:app worker -l info
 
 beat:
-	$(CELERY) -A config beat -l info
+	$(RUN) celery --workdir src -A config.celery:app beat -l info
 
 shell:
-	$(PYTHON) manage.py shell
+	$(MANAGE) shell
 
 incremental-status:
-	$(PYTHON) manage.py incremental_sync --status
+	$(MANAGE) incremental_sync --status
