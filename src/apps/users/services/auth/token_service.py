@@ -3,7 +3,7 @@ from contextlib import suppress
 from django.conf import settings
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.response import Response
-from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 
@@ -55,7 +55,10 @@ class TokenService:
     @classmethod
     def rotate_refresh_token(cls, refresh_token: str) -> dict:
         serializer = TokenRefreshSerializer(data={"refresh": refresh_token})
-        serializer.is_valid(raise_exception=True)
+        try:
+            serializer.is_valid(raise_exception=True)
+        except TokenError as exc:
+            raise InvalidToken(str(exc)) from exc
         return serializer.validated_data
 
     @staticmethod

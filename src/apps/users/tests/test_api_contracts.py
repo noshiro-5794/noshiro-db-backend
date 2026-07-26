@@ -2,7 +2,11 @@ from datetime import date
 from unittest.mock import Mock, patch
 
 import pytest
+from django.conf import settings
 from django.db import models
+from rest_framework import status
+from rest_framework.test import APIClient
+from rest_framework_simplejwt.exceptions import TokenError
 
 from apps.users.api.serializers.library.collection_serializer import (
     CollectionListRequestSerializer,
@@ -62,6 +66,24 @@ def test_watch_date_normalization_is_strict() -> None:
             watch_start_date=date(2026, 7, 28),
             watch_end_date=date(2026, 7, 27),
         )
+
+
+def test_blacklisted_refresh_tokens_return_unauthorized() -> None:
+    client = APIClient()
+    client.cookies[settings.JWT_REFRESH_COOKIE_NAME] = "blacklisted-refresh-token"
+
+    with patch(
+        "apps.users.services.auth.token_service.TokenRefreshSerializer"
+    ) as serializer_class:
+        serializer_class.return_value.is_valid.side_effect = TokenError(
+            "Token is blacklisted"
+        )
+        response = client.post("/api/users/token/refresh/")
+
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+    assert response.data["code"] == 40100
+    assert response.data["message"] == "Token is blacklisted"
+    assert str(response.data["data"]["detail"]) == "Token is blacklisted"
 
 
 def test_blocked_public_profiles_are_masked_as_not_found() -> None:
