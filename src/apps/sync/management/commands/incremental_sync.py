@@ -2,7 +2,7 @@ import json
 
 from django.core.management.base import BaseCommand, CommandError
 
-from apps.sync.exceptions import SyncException
+from apps.sync.exceptions import SyncOperationError
 from apps.sync.services.incremental_sync_service import incremental_sync_service
 
 
@@ -52,7 +52,7 @@ class Command(BaseCommand):
                         batch_size=options.get("batch_size"),
                         verbose=True,
                     )
-            except SyncException as exc:
+            except SyncOperationError as exc:
                 raise CommandError(str(exc)) from exc
 
         self.stdout.write(json.dumps(result, ensure_ascii=False, default=str, indent=2))

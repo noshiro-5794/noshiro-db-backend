@@ -7,6 +7,7 @@ import httpx
 from django.conf import settings
 
 from integrations.storage.minio import minio_client
+from shared.outbound import httpx_client_kwargs
 
 logger = logging.getLogger(__name__)
 
@@ -21,9 +22,11 @@ class CalendarImageService:
     def client(self) -> httpx.Client:
         if self._client is None:
             self._client = httpx.Client(
-                headers={"User-Agent": settings.BANGUMI_USER_AGENT},
-                timeout=settings.BANGUMI_TIMEOUT,
-                follow_redirects=False,
+                **httpx_client_kwargs(
+                    headers={"User-Agent": settings.BANGUMI_USER_AGENT},
+                    timeout=settings.BANGUMI_TIMEOUT,
+                    follow_redirects=False,
+                )
             )
         return self._client
 

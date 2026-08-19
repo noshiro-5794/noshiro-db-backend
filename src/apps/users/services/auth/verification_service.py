@@ -73,9 +73,7 @@ class VerificationService:
     @classmethod
     def send_code(cls, *, email: str, purpose: str) -> EmailVerification:
         verification = cls.create_verification(email=email, purpose=purpose)
-        send_verification_email.delay(
-            email=email, code=verification.code, purpose=purpose
-        )
+        send_verification_email.delay(verification_id=verification.id)
         return verification
 
     @classmethod

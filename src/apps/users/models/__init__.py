@@ -2,6 +2,7 @@ from .account import EmailVerification, User, UserManager
 from .collection import Collection, CollectionItem
 from .library import (
     UserEpisodeProgress,
+    UserRelease,
     UserSubject,
     UserSubjectRatingDetail,
     UserSubjectTag,
@@ -19,6 +20,7 @@ __all__ = (
     "UserEpisodeProgress",
     "UserManager",
     "UserProfile",
+    "UserRelease",
     "UserSubject",
     "UserSubjectRatingDetail",
     "UserSubjectTag",

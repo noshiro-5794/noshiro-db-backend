@@ -28,25 +28,24 @@ class ActivityService:
         return Visibility.PUBLIC if is_public else Visibility.PRIVATE
 
     @staticmethod
-    def _subject_snapshot_from_user_subject(user_subject):
+    def _entity_snapshot_from_library_entry(user_subject):
         if not user_subject:
             return {}
 
-        subject = user_subject.subject
+        entity = user_subject.entity
+        if entity is None:
+            return {}
+        name = entity.names.order_by("-is_official", "id").first()
 
         return ActivityService._metadata_value(
             {
-                "subject": {
-                    "id": str(subject.id),
-                    "subject_type": subject.subject_type,
-                    "title": subject.title,
-                    "title_cn": subject.title_cn,
-                    "date": subject.date,
-                    "image_thumbnail": subject.image_thumbnail,
-                    "platform": subject.platform,
-                    "nsfw": subject.nsfw,
+                "entity": {
+                    "id": str(entity.id),
+                    "kind": entity.kind,
+                    "display_name": name.text if name else "Untitled",
+                    "audience": entity.audience,
                 },
-                "user_subject": {
+                "library_entry": {
                     "id": user_subject.id,
                     "status": user_subject.status,
                     "simple_rating": user_subject.simple_rating,
@@ -60,62 +59,68 @@ class ActivityService:
     @staticmethod
     @transaction.atomic
     def create_user_subject_created_activity(*, user, user_subject):
-        subject = user_subject.subject
+        entity = user_subject.entity
+        name = entity.names.order_by("-is_official", "id").first()
+        display_name = name.text if name else "Untitled"
 
         return Activity.objects.create(
             user=user,
-            subject=subject,
+            entity=entity,
             activity_type=Activity.ActivityType.USER_SUBJECT_CREATED,
             user_subject=user_subject,
-            message=f"Added '{subject.title}' to collection",
+            message=f"Added '{display_name}' to library",
             visibility=ActivityService._visibility_from_public_flag(
                 user_subject.is_public
             ),
             feed_policy=FeedPolicy.NORMAL,
-            group_key=f"user_subject:{user.id}:{subject.id}",
+            group_key=f"library_entry:{user.id}:{entity.id}",
             dedupe_key=f"user_subject_created:{user_subject.id}",
-            metadata=ActivityService._subject_snapshot_from_user_subject(user_subject),
+            metadata=ActivityService._entity_snapshot_from_library_entry(user_subject),
         )
 
     @staticmethod
     @transaction.atomic
     def create_user_subject_updated_activity(*, user, user_subject):
-        subject = user_subject.subject
+        entity = user_subject.entity
+        name = entity.names.order_by("-is_official", "id").first()
+        display_name = name.text if name else "Untitled"
 
         return Activity.objects.create(
             user=user,
-            subject=subject,
+            entity=entity,
             activity_type=Activity.ActivityType.USER_SUBJECT_UPDATED,
             user_subject=user_subject,
-            message=f"Updated collection status for '{subject.title}'",
+            message=f"Updated library status for '{display_name}'",
             visibility=ActivityService._visibility_from_public_flag(
                 user_subject.is_public
             ),
             feed_policy=FeedPolicy.NORMAL,
-            group_key=f"user_subject:{user.id}:{subject.id}",
-            metadata=ActivityService._subject_snapshot_from_user_subject(user_subject),
+            group_key=f"library_entry:{user.id}:{entity.id}",
+            metadata=ActivityService._entity_snapshot_from_library_entry(user_subject),
         )
 
     @staticmethod
     @transaction.atomic
     def create_review_created_activity(*, user, review):
         user_subject = review.user_subject
-        subject = user_subject.subject
+        entity = user_subject.entity
+        name = entity.names.order_by("-is_official", "id").first()
+        display_name = name.text if name else "Untitled"
         is_public = user_subject.is_public and review.is_public
 
         return Activity.objects.create(
             user=user,
-            subject=subject,
+            entity=entity,
             activity_type=Activity.ActivityType.REVIEW_CREATED,
             user_subject=user_subject,
             review=review,
-            message=f"Posted a review for '{subject.title}': {review.title}",
+            message=f"Posted a review for '{display_name}': {review.title}",
             visibility=ActivityService._visibility_from_public_flag(is_public),
             feed_policy=FeedPolicy.NORMAL,
-            group_key=f"review:{subject.id}",
+            group_key=f"review:{entity.id}",
             dedupe_key=f"review_created:{review.id}",
             metadata={
-                **ActivityService._subject_snapshot_from_user_subject(user_subject),
+                **ActivityService._entity_snapshot_from_library_entry(user_subject),
                 "review": {
                     "id": review.id,
                     "title": review.title,
@@ -152,23 +157,25 @@ class ActivityService:
     def create_collection_item_added_activity(*, user, collection_item):
         collection = collection_item.collection
         user_subject = collection_item.user_subject
-        subject = user_subject.subject
+        entity = user_subject.entity
+        name = entity.names.order_by("-is_official", "id").first()
+        display_name = name.text if name else "Untitled"
         is_public = user_subject.is_public and collection.is_public
 
         return Activity.objects.create(
             user=user,
-            subject=subject,
+            entity=entity,
             activity_type=Activity.ActivityType.COLLECTION_ITEM_ADDED,
             user_subject=user_subject,
             collection=collection,
             collection_item=collection_item,
-            message=f"Added '{subject.title}' to collection '{collection.name}'",
+            message=f"Added '{display_name}' to collection '{collection.name}'",
             visibility=ActivityService._visibility_from_public_flag(is_public),
             feed_policy=FeedPolicy.NORMAL,
             group_key=f"collection:{collection.id}",
             dedupe_key=f"collection_item_added:{collection_item.id}",
             metadata={
-                **ActivityService._subject_snapshot_from_user_subject(user_subject),
+                **ActivityService._entity_snapshot_from_library_entry(user_subject),
                 "collection": {
                     "id": collection.id,
                     "name": collection.name,
@@ -223,11 +230,11 @@ class ActivityService:
     @transaction.atomic
     def create_comment_created_activity(*, user, comment):
         post = comment.post
-        subject = post.subject if post else None
+        entity = post.entity if post else None
 
         return Activity.objects.create(
             user=user,
-            subject=subject,
+            entity=entity,
             post=post,
             comment=comment,
             activity_type=Activity.ActivityType.COMMENT_CREATED,

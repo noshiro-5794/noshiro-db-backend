@@ -1,63 +1,71 @@
 from django.urls import path
 
-from apps.index.api.views.calendar_view import CalendarView
-from apps.index.api.views.subject_section_view import (
-    SubjectCharacterListView,
-    SubjectEpisodeDetailView,
-    SubjectEpisodeListView,
-    SubjectRelationListView,
-    SubjectStaffListView,
-    SubjectStaffRoleListView,
-)
-from apps.index.api.views.subject_view import (
-    SubjectDetailView,
-    SubjectListView,
+from apps.index.api.views.knowledge import (
+    CalendarEventListView,
+    CollectionEntityListView,
+    CollectionListView,
+    EntityCharacterListView,
+    EntityCreditListView,
+    EntityDetailView,
+    EntityEpisodeListView,
+    EntityEvidenceListView,
+    EntityListView,
+    EntityMetricListView,
+    EntityRelationListView,
+    EntityReleaseListView,
 )
 
 urlpatterns = [
+    path("index/collections/", CollectionListView.as_view(), name="index-collections"),
     path(
-        "calendar/",
-        CalendarView.as_view(),
-        name="calendar",
+        "index/collections/<slug:slug>/entities/",
+        CollectionEntityListView.as_view(),
+        name="index-collection-entities",
+    ),
+    path("index/entities/", EntityListView.as_view(), name="index-entities"),
+    path(
+        "index/entities/<uuid:entity_id>/",
+        EntityDetailView.as_view(),
+        name="index-entity",
     ),
     path(
-        "subjects/",
-        SubjectListView.as_view(),
-        name="subject-list",
+        "index/entities/<uuid:entity_id>/episodes/",
+        EntityEpisodeListView.as_view(),
+        name="index-entity-episodes",
     ),
     path(
-        "subjects/<uuid:subject_id>/",
-        SubjectDetailView.as_view(),
-        name="subject-detail",
+        "index/entities/<uuid:entity_id>/relations/",
+        EntityRelationListView.as_view(),
+        name="index-entity-relations",
     ),
     path(
-        "subjects/<uuid:subject_id>/episodes/",
-        SubjectEpisodeListView.as_view(),
-        name="subject-episode-list",
+        "index/entities/<uuid:entity_id>/characters/",
+        EntityCharacterListView.as_view(),
+        name="index-entity-characters",
     ),
     path(
-        "subjects/<uuid:subject_id>/episodes/<int:episode_id>/",
-        SubjectEpisodeDetailView.as_view(),
-        name="subject-episode-detail",
+        "index/entities/<uuid:entity_id>/credits/",
+        EntityCreditListView.as_view(),
+        name="index-entity-credits",
     ),
     path(
-        "subjects/<uuid:subject_id>/staff/",
-        SubjectStaffListView.as_view(),
-        name="subject-staff-list",
+        "index/entities/<uuid:entity_id>/releases/",
+        EntityReleaseListView.as_view(),
+        name="index-entity-releases",
     ),
     path(
-        "subjects/<uuid:subject_id>/staff/roles/",
-        SubjectStaffRoleListView.as_view(),
-        name="subject-staff-role-list",
+        "index/entities/<uuid:entity_id>/metrics/",
+        EntityMetricListView.as_view(),
+        name="index-entity-metrics",
     ),
     path(
-        "subjects/<uuid:subject_id>/characters/",
-        SubjectCharacterListView.as_view(),
-        name="subject-character-list",
+        "index/entities/<uuid:entity_id>/evidence/",
+        EntityEvidenceListView.as_view(),
+        name="index-entity-evidence",
     ),
     path(
-        "subjects/<uuid:subject_id>/relations/",
-        SubjectRelationListView.as_view(),
-        name="subject-relation-list",
+        "index/calendar/events/",
+        CalendarEventListView.as_view(),
+        name="index-calendar-events",
     ),
 ]

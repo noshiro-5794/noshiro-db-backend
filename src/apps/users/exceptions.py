@@ -1,96 +1,110 @@
-from shared.errors import ApplicationError
+from http import HTTPStatus
+
+from shared.exceptions import ApplicationError
 
 
-class UserException(ApplicationError):
-    default_code = 10000
-    default_message = "user error"
+class UserError(ApplicationError):
+    default_code = "user_error"
+    default_message = "The user operation could not be completed."
 
 
-class EmailSendTooFrequent(UserException):
-    default_code = 11000
-    default_message = "email send too frequent"
+class EmailSendTooFrequent(UserError):
+    default_code = "users.email_send_too_frequent"
+    default_message = "Email was requested too frequently."
+    default_status = HTTPStatus.TOO_MANY_REQUESTS
 
 
-class InvalidVerifyCode(UserException):
-    default_code = 11001
-    default_message = "invalid verify code"
+class InvalidVerifyCode(UserError):
+    default_code = "users.invalid_verification_code"
+    default_message = "The verification code is invalid."
 
 
-class VerifyCodeExpired(UserException):
-    default_code = 11002
-    default_message = "verify code expired"
+class VerifyCodeExpired(UserError):
+    default_code = "users.verification_code_expired"
+    default_message = "The verification code has expired."
 
 
-class InvalidCaptcha(UserException):
-    default_code = 11003
-    default_message = "invalid captcha"
+class InvalidCaptcha(UserError):
+    default_code = "users.invalid_captcha"
+    default_message = "Captcha validation failed."
 
 
-class EmailAlreadyExists(UserException):
-    default_code = 11100
-    default_message = "email already exists"
+class EmailAlreadyExists(UserError):
+    default_code = "users.email_already_exists"
+    default_message = "The email address is already registered."
+    default_status = HTTPStatus.CONFLICT
 
 
-class NicknameAlreadyExists(UserException):
-    default_code = 11101
-    default_message = "nickname already exists"
+class NicknameAlreadyExists(UserError):
+    default_code = "users.nickname_already_exists"
+    default_message = "The nickname is already in use."
+    default_status = HTTPStatus.CONFLICT
 
 
-class InvalidEmailOrPassword(UserException):
-    default_code = 11200
-    default_message = "invalid email or password"
+class InvalidEmailOrPassword(UserError):
+    default_code = "users.invalid_credentials"
+    default_message = "The email address or password is invalid."
+    default_status = HTTPStatus.UNAUTHORIZED
 
 
-class UserNotFound(UserException):
-    default_code = 11201
-    default_message = "user not found"
+class UserNotFound(UserError):
+    default_code = "users.user_not_found"
+    default_message = "User not found."
+    default_status = HTTPStatus.NOT_FOUND
 
 
-class AvatarUploadFailed(UserException):
-    default_code = 12000
-    default_message = "avatar upload failed"
+class AvatarUploadFailed(UserError):
+    default_code = "users.avatar_upload_failed"
+    default_message = "The avatar could not be uploaded."
+    default_status = HTTPStatus.BAD_GATEWAY
 
 
-class UserSubjectNotFound(UserException):
-    default_code = 12100
-    default_message = "user subject not found"
+class UserSubjectNotFound(UserError):
+    default_code = "users.library_entry_not_found"
+    default_message = "Library entry not found."
+    default_status = HTTPStatus.NOT_FOUND
 
 
-class InvalidWatchDateRange(UserException):
-    default_code = 12101
+class InvalidWatchDateRange(UserError):
+    default_code = "users.invalid_watch_date_range"
     default_message = "watch end date must not be earlier than watch start date"
 
 
-class TagNotFound(UserException):
-    default_code = 12200
-    default_message = "tag not found"
+class TagNotFound(UserError):
+    default_code = "users.tag_not_found"
+    default_message = "Tag not found."
+    default_status = HTTPStatus.NOT_FOUND
 
 
-class TagAlreadyExists(UserException):
-    default_code = 12201
-    default_message = "tag already exists"
+class TagAlreadyExists(UserError):
+    default_code = "users.tag_already_exists"
+    default_message = "The tag already exists."
+    default_status = HTTPStatus.CONFLICT
 
 
-class InvalidTagIds(UserException):
-    default_code = 12202
-    default_message = "invalid tag ids"
+class InvalidTagIds(UserError):
+    default_code = "users.invalid_tag_ids"
+    default_message = "One or more tag IDs are invalid."
 
 
-class ReviewNotFound(UserException):
-    default_code = 12300
-    default_message = "review not found"
+class ReviewNotFound(UserError):
+    default_code = "users.review_not_found"
+    default_message = "Review not found."
+    default_status = HTTPStatus.NOT_FOUND
 
 
-class CollectionNotFound(UserException):
-    default_code = 12400
-    default_message = "collection not found"
+class CollectionNotFound(UserError):
+    default_code = "users.collection_not_found"
+    default_message = "Collection not found."
+    default_status = HTTPStatus.NOT_FOUND
 
 
-class CollectionItemNotFound(UserException):
-    default_code = 12401
-    default_message = "collection item not found"
+class CollectionItemNotFound(UserError):
+    default_code = "users.collection_item_not_found"
+    default_message = "Collection item not found."
+    default_status = HTTPStatus.NOT_FOUND
 
 
-class InvalidUserSubjectIds(UserException):
-    default_code = 12402
-    default_message = "invalid user subject ids"
+class InvalidUserSubjectIds(UserError):
+    default_code = "users.invalid_library_entry_ids"
+    default_message = "One or more library entry IDs are invalid."

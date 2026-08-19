@@ -1,3 +1,4 @@
+from ipaddress import ip_network
 from urllib.parse import urlparse
 
 from django.core.exceptions import ImproperlyConfigured
@@ -19,7 +20,6 @@ required_settings = {
     "CACHE_URL": CACHES["default"]["BACKEND"]
     == "django.core.cache.backends.redis.RedisCache",
     "CELERY_BROKER_URL": bool(CELERY_BROKER_URL),
-    "CELERY_RESULT_BACKEND": bool(CELERY_RESULT_BACKEND),
     "RESEND_API_KEY": bool(RESEND_API_KEY),
     "MINIO_ENDPOINT": bool(MINIO_ENDPOINT),
     "MINIO_ACCESS_KEY": bool(MINIO_ACCESS_KEY),
@@ -52,6 +52,9 @@ positive_settings = {
     "BANGUMI_TIMEOUT": BANGUMI_TIMEOUT,
     "BANGUMI_IMAGE_MAX_BYTES": BANGUMI_IMAGE_MAX_BYTES,
     "AI_AGENT_TIMEOUT": AI_AGENT_TIMEOUT,
+    "MCP_PORT": MCP_PORT,
+    "MCP_RATE_LIMIT": MCP_RATE_LIMIT,
+    "MCP_RATE_WINDOW_SECONDS": MCP_RATE_WINDOW_SECONDS,
     "HCAPTCHA_TIMEOUT": HCAPTCHA_TIMEOUT,
     "SYNC_INCREMENTAL_SUBJECT_BATCH_SIZE": SYNC_INCREMENTAL_SUBJECT_BATCH_SIZE,
     "SYNC_INCREMENTAL_MAX_CONSECUTIVE_ERRORS": SYNC_INCREMENTAL_MAX_CONSECUTIVE_ERRORS,
@@ -77,6 +80,18 @@ if not BANGUMI_IMAGE_ALLOWED_HOSTS:
         "BANGUMI_IMAGE_ALLOWED_HOSTS must contain at least one host."
     )
 
+if not TRUSTED_PROXY_CIDRS:
+    raise ImproperlyConfigured(
+        "TRUSTED_PROXY_CIDRS must list the reverse proxy addresses in production."
+    )
+try:
+    for trusted_proxy_cidr in TRUSTED_PROXY_CIDRS:
+        ip_network(trusted_proxy_cidr, strict=False)
+except ValueError as exc:
+    raise ImproperlyConfigured(
+        "TRUSTED_PROXY_CIDRS must contain valid IPv4 or IPv6 networks."
+    ) from exc
+
 https_url_settings = {
     "FRONTEND_SITE_URL": FRONTEND_SITE_URL,
     "MINIO_PUBLIC_URL": MINIO_PUBLIC_URL,
@@ -94,6 +109,7 @@ if invalid_https_settings:
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 SECURE_SSL_REDIRECT = True
+SECURE_REDIRECT_EXEMPT = [r"^health/"]
 
 SECURE_CONTENT_TYPE_NOSNIFF = True
 
@@ -112,3 +128,25 @@ SECURE_HSTS_SECONDS = 60 * 60 * 24 * 30
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 
 SECURE_HSTS_PRELOAD = True
+
+ENABLE_ADMIN = env.bool("ENABLE_ADMIN", default=False)
+
+ENABLE_API_DOCS = env.bool("ENABLE_API_DOCS", default=False)
+
+SENTRY_DSN = env("SENTRY_DSN", default="")
+SENTRY_TRACES_SAMPLE_RATE = env.float("SENTRY_TRACES_SAMPLE_RATE", default=0.0)
+
+if not 0 <= SENTRY_TRACES_SAMPLE_RATE <= 1:
+    raise ImproperlyConfigured("SENTRY_TRACES_SAMPLE_RATE must be between 0 and 1.")
+
+if SENTRY_DSN:
+    import sentry_sdk
+    from sentry_sdk.integrations.celery import CeleryIntegration
+    from sentry_sdk.integrations.django import DjangoIntegration
+
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        integrations=[DjangoIntegration(), CeleryIntegration()],
+        send_default_pii=False,
+        traces_sample_rate=SENTRY_TRACES_SAMPLE_RATE,
+    )

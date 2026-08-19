@@ -4,7 +4,7 @@ MANAGE ?= $(RUN) python src/manage.py
 HOST ?= 0.0.0.0
 PORT ?= 8008
 
-.PHONY: sync lock upgrade format lint test check migrations migrate run worker beat shell incremental-status
+.PHONY: sync lock upgrade format lint test coverage check migrations bootstrap-db migrate run worker beat shell incremental-status
 
 sync:
 	$(UV) sync --frozen
@@ -26,6 +26,9 @@ lint:
 test:
 	$(RUN) pytest
 
+coverage:
+	$(RUN) pytest --cov=src --cov-report=term-missing --cov-report=xml --cov-fail-under=64
+
 check: lint test
 	$(MANAGE) check
 	$(MANAGE) makemigrations --check --dry-run
@@ -33,7 +36,10 @@ check: lint test
 migrations:
 	$(MANAGE) makemigrations
 
-migrate:
+bootstrap-db:
+	$(MANAGE) bootstrap_database
+
+migrate: bootstrap-db
 	$(MANAGE) migrate
 
 run:

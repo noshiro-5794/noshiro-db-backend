@@ -1,135 +1,103 @@
 # Architecture
 
-Noshiro DB is organized by product boundary instead of technical layer.
+Noshiro DB is a source-neutral anime and galgame knowledge base, personal library,
+and community backend. It uses Django, Django REST Framework, PostgreSQL, Redis,
+Celery, and MinIO.
 
-## Apps
-
-```text
-src/apps/users
-src/apps/community
-src/apps/index
-src/apps/sync
-```
-
-`src` is the Python import root, not a Python package, so it intentionally has
-no `__init__.py`. Physical paths use `src/apps/...`, while Django app names
-remain `apps.users`, `apps.community`, `apps.index`, and `apps.sync`. Package
-directories keep explicit `__init__.py` files for predictable Django discovery.
-
-## Boundaries
-
-`src/apps/users` owns account and personal library data:
+## System Boundaries
 
 ```text
-User
-UserProfile
-EmailVerification
-UserSubject
-UserEpisodeProgress
-UserTag
-UserSubjectTag
-UserSubjectRatingDetail
-Review
-Collection
-CollectionItem
+frontend
+   |
+   v
+/api/v1/ (Django + DRF)
+   |
+   +-- PostgreSQL  knowledge, evidence, users, community
+   +-- Redis       cache and Celery broker
+   +-- MinIO       user-uploaded media
+   `-- Celery      Bangumi/VNDB imports and AI work
 ```
-
-`src/apps/community` owns social interaction data:
 
 ```text
-UserFollow
-Activity
-CommunityPost
-CommunityComment
-CommunityReaction
-CommunityBookmark
-Notification
-CommunityReport
-UserBlock
-UserMute
-ModerationAction
+src/
+  apps/          domain applications
+  config/        Django, URL, and Celery configuration
+  integrations/  reusable external service adapters
+  shared/        framework utilities without domain ownership
 ```
 
-`src/apps/index` owns public catalog data synchronized from Bangumi. The `index`
-name is intentional product terminology and should not be renamed.
+| App | Responsibility |
+| --- | --- |
+| `index` | canonical entities, evidence, relations, resolution, projections |
+| `sync` | provider clients, import orchestration, jobs, and Celery tasks |
+| `users` | accounts, profiles, libraries, progress, reviews, collections |
+| `community` | posts, comments, social graph, feeds, moderation |
+| `ai` | AI runs, proposals, policies, evaluation, and audit |
 
-`src/apps/sync` owns synchronization state, external providers, Celery tasks, management commands, and staff-only sync APIs.
+Apps use the same layer meanings: `api` owns HTTP contracts, `selectors` own reads,
+`services` own writes and policy, and `tasks` are thin asynchronous entry points.
+External SDKs and protocols belong in `integrations`; domain apps depend on adapters,
+not vendor clients.
 
-## Shared Code
-
-`src/shared` contains stable, app-neutral code used by multiple apps. Shared API
-responses, pagination, exception handling, and application errors live here.
-It must not contain models, app-specific business rules, or external SDK clients.
-Application errors are plain Python exceptions; the API exception handler owns
-their HTTP status and response-envelope mapping.
-
-## Integrations
-
-`src/integrations` contains external adapters shared by multiple apps. MinIO
-storage lives here because both user profiles and synchronization workflows use it.
-An adapter owned by one business app remains inside that app's `providers` package.
-
-## Layering
+## Knowledge Model
 
 ```text
-api/views         request/response boundary
-api/serializers   input validation and output shape
-selectors         read/query logic
-services          write/business logic
-tasks             Celery wrappers
-providers         external API clients
+Entity
+|- Work
+|  |- AnimeProfile
+|  `- GalgameProfile
+|- Release
+|- Episode
+|- Contributor (Person or Organization)
+`- Character
 ```
 
-Views should stay thin. Business rules belong in services. Query composition belongs in selectors. Serializers should not perform database writes.
+`Entity` is the stable UUID, visibility, lifecycle, and redirect anchor. `Work` is a
+creative work. Platform, language, regional, and limited editions are Releases;
+sequels, independent seasons, OVAs, fandiscs, and materially different remakes are
+separate Works. Anime and Galgame enter the primary Index collections; other works
+remain searchable related entities.
 
-Small apps may keep a single `models.py`. When it becomes difficult to navigate,
-models are split by domain under `models/`, with `models/__init__.py` preserving
-the app's stable public imports. `community` and `users` follow this pattern.
+Names retain language, script, region, kind, and provenance. Partial dates retain
+their precision and raw value. Adult and spoiler visibility belongs to the affected
+entity, description, fact, or media rather than being inferred at response time.
+Core relations use typed models; `Fact` is reserved for long-tail knowledge.
 
-## Settings
+## Provider Data Flow
 
-`src/config/settings/base.py` contains shared Django configuration. `local.py`,
-`production.py`, and `test.py` contain environment-specific behavior. Only local
-settings load `.env`; production configuration comes from the process environment.
+Bangumi and VNDB are peer providers. Neither wins because it was imported first.
 
-## Providers
-
-External adapters stay with the app that owns their workflow. Bangumi and AI
-normalization therefore live under `src/apps/sync/providers`. AI should move to
-`src/integrations/ai` only when it becomes a cross-app capability.
-
-Bangumi request throttling is enforced inside its provider, so pagination and
-multi-request relation syncs cannot bypass the rate limit. Provider-specific
-HTTP failures retain structured status information; services do not infer 404s
-by parsing exception text.
-
-A common catalog-provider protocol and normalized data objects should be added
-when a second catalog source is implemented. Source-specific response formats
-should not leak beyond provider adapters at that point.
-
-## Tests
-
-Cross-application configuration and architecture contracts live in `tests/`.
-App-specific tests should stay inside the owning app's `tests/` package.
-Tests use PostgreSQL so PostgreSQL-specific fields, indexes, constraints, and
-query behavior match production.
-
-## API Response
-
-All API responses use the shared response envelope:
-
-```json
-{
-  "code": 0,
-  "message": "",
-  "data": {}
-}
+```text
+ProviderRevision -> MappingRun -> Observation -> evidence
+                                             -> resolution -> API projection
+ProviderRecord <-> ProviderRepresentation <-> Entity
 ```
 
-Paginated data is placed inside `data`.
+Raw revisions and normalized observations are immutable and mapper-versioned. Metrics
+remain separate by provider and observation time. Resolver policy chooses rebuildable
+projections without deleting conflicting source values. Merges use redirects so they
+remain reversible and evidence is retained.
 
-## Community Activity
+## AI And MCP
 
-`Activity` is not a full audit log. It is a displayable feed item for community surfaces. It supports visibility, feed policy, metadata snapshots, grouping, and deduplication.
+AI produces structured proposals and cannot write canonical tables directly.
+`apps.ai` owns policy and audit while `integrations.ai` isolates vendor clients.
+Provider requests and AI inference run outside canonical database transactions. The
+internal MCP server exposes reads and audited proposal submission; the public server
+exposes only authenticated, rate-limited safe projections.
 
-Audit-style tracking should be implemented separately if needed.
+External HTTP clients use `OUTBOUND_PROXY_URL` when configured. Set it on servers
+that cannot reach Bangumi, VNDB, image hosts, Resend, hCaptcha, or the AI provider
+directly. Internal service names in `OUTBOUND_NO_PROXY_HOSTS` should remain excluded
+from the proxy. On the current server, the v2raya plain HTTP inbound listens on
+`192.168.3.222:7890`; use that as `OUTBOUND_PROXY_URL`.
+
+## Public API
+
+The only public REST root is `/api/v1/`, assembled by `config.api_urls`. There is no
+unversioned compatibility API or `/api/v2/`. OpenAPI at `/api/v1/openapi/` is the
+endpoint and schema contract.
+
+The source-neutral tables currently coexist with deprecated Bangumi-centered tables
+during migration. Old `Subject` data is read-only migration input. Production schema
+and data changes follow [Deployment](deployment.md).

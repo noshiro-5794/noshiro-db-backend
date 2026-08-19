@@ -13,7 +13,7 @@ class NotificationSelector:
             "activity__user__profile",
             "activity__target_user",
             "activity__target_user__profile",
-            "activity__subject",
+            "activity__entity",
             "activity__review",
             "activity__review__user_subject",
             "activity__review__user_subject__user",
@@ -38,8 +38,12 @@ class NotificationSelector:
             "review",
             "review__user_subject",
             "review__user_subject__user",
+            "review__user_subject__entity",
             "collection",
             "collection__user",
+        ).prefetch_related(
+            "activity__entity__names",
+            "review__user_subject__entity__names",
         )
 
     @classmethod

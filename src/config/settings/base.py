@@ -23,7 +23,9 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 LANGUAGE_CODE = "en-us"
 
-TIME_ZONE = env("TZ", default="Asia/Shanghai")
+TIME_ZONE = "UTC"
+
+DEPLOYMENT_TIME_ZONE = env("TZ", default="Asia/Shanghai")
 
 USE_I18N = True
 
@@ -42,12 +44,15 @@ DJANGO_APPS = [
 ]
 
 THIRD_PARTY_APPS = [
+    "django_filters",
+    "drf_spectacular",
     "rest_framework",
     "corsheaders",
     "rest_framework_simplejwt.token_blacklist",
 ]
 
 LOCAL_APPS = [
+    "apps.ai",
     "apps.users",
     "apps.community",
     "apps.index",
@@ -59,6 +64,8 @@ INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 # Request handling
 
 MIDDLEWARE = [
+    "shared.http.TrustedProxyMiddleware",
+    "shared.observability.middleware.RequestContextMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
@@ -129,7 +136,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        "shared.api.authentication.ContextJWTAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
     "DEFAULT_THROTTLE_CLASSES": ("rest_framework.throttling.ScopedRateThrottle",),
@@ -141,7 +148,27 @@ REST_FRAMEWORK = {
         "verification": "5/min",
     },
     "EXCEPTION_HANDLER": "shared.api.exception_handler.custom_exception_handler",
+    "DEFAULT_FILTER_BACKENDS": ("django_filters.rest_framework.DjangoFilterBackend",),
+    "DEFAULT_SCHEMA_CLASS": "shared.api.schema.NoshiroAutoSchema",
 }
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Noshiro DB API",
+    "DESCRIPTION": "Source-neutral anime and galgame knowledge API.",
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+    "ENUM_NAME_OVERRIDES": {
+        "EntityLifecycle": "apps.index.models.Entity.Lifecycle",
+        "EntityAudience": "apps.index.models.Entity.Audience",
+        "EntityKind": "apps.index.models.Entity.Kind",
+        "LibraryStatus": "apps.users.models.UserSubject.Status",
+        "ReleaseStatus": "apps.users.models.UserRelease.Status",
+        "SyncJobStatus": "apps.sync.models.SyncJob.Status",
+        "CommunityReportStatus": "apps.community.models.CommunityReport.ReportStatus",
+    },
+}
+
+SPECTACULAR_EXTENSIONS = ("shared.api.schema.ContextJWTScheme",)
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(hours=2),
@@ -149,10 +176,11 @@ SIMPLE_JWT = {
     "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": True,
     "UPDATE_LAST_LOGIN": True,
+    "CHECK_REVOKE_TOKEN": True,
 }
 
 JWT_REFRESH_COOKIE_NAME = env("JWT_REFRESH_COOKIE_NAME", default="noshiro_refresh")
-JWT_REFRESH_COOKIE_PATH = env("JWT_REFRESH_COOKIE_PATH", default="/api/users/")
+JWT_REFRESH_COOKIE_PATH = env("JWT_REFRESH_COOKIE_PATH", default="/api/v1/auth/")
 JWT_REFRESH_COOKIE_DOMAIN = env("JWT_REFRESH_COOKIE_DOMAIN", default=None) or None
 JWT_REFRESH_COOKIE_SECURE = env.bool("JWT_REFRESH_COOKIE_SECURE", default=False)
 JWT_REFRESH_COOKIE_HTTP_ONLY = True
@@ -171,11 +199,52 @@ CORS_ALLOWED_ORIGINS = env_list("CORS_ALLOWED_ORIGINS")
 
 CSRF_TRUSTED_ORIGINS = env_list("CSRF_TRUSTED_ORIGINS")
 
+TRUSTED_PROXY_CIDRS = env_list("TRUSTED_PROXY_CIDRS")
+
+ENABLE_ADMIN = True
+
+ENABLE_API_DOCS = True
+
+LOG_LEVEL = env("LOG_LEVEL", default="INFO")
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "json": {
+            "()": "shared.observability.logging.JsonFormatter",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "json",
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": LOG_LEVEL,
+    },
+    "loggers": {
+        "django.server": {
+            "handlers": ["console"],
+            "level": "WARNING",
+            "propagate": False,
+        },
+    },
+}
+
 # Celery
 
 CELERY_BROKER_URL = env("CELERY_BROKER_URL", default=None)
 
-CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND", default=None)
+CELERY_RESULT_BACKEND = None
+
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+
+CELERY_BROKER_TRANSPORT_OPTIONS = {
+    "visibility_timeout": env.int("CELERY_VISIBILITY_TIMEOUT", default=7200),
+}
 
 CELERY_ACCEPT_CONTENT = ["json"]
 
@@ -183,7 +252,7 @@ CELERY_TASK_SERIALIZER = "json"
 
 CELERY_RESULT_SERIALIZER = "json"
 
-CELERY_TIMEZONE = TIME_ZONE
+CELERY_TIMEZONE = DEPLOYMENT_TIME_ZONE
 
 CELERY_TASK_TIME_LIMIT = 30
 
@@ -196,6 +265,30 @@ CELERY_WORKER_PREFETCH_MULTIPLIER = 1
 CELERY_TASK_DEFAULT_RETRY_DELAY = 60
 
 CELERY_TASK_MAX_RETRIES = 3
+
+CELERY_TASK_DEFAULT_QUEUE = "realtime"
+
+CELERY_TASK_QUEUES = {
+    "realtime": {
+        "exchange": "realtime",
+        "routing_key": "realtime",
+    },
+    "ai": {
+        "exchange": "ai",
+        "routing_key": "ai",
+    },
+    "sync": {
+        "exchange": "sync",
+        "routing_key": "sync",
+    },
+}
+
+CELERY_TASK_ROUTES = {
+    "apps.users.tasks.email_tasks.send_verification_email": {"queue": "realtime"},
+    "apps.sync.tasks.maintenance.*": {"queue": "realtime"},
+    "apps.ai.tasks.*": {"queue": "ai"},
+    "apps.sync.tasks.*": {"queue": "sync"},
+}
 
 CELERY_BEAT_SCHEDULE = {
     "daily-calendar-sync": {
@@ -211,6 +304,14 @@ CELERY_BEAT_SCHEDULE = {
             hour=env.int("SYNC_INCREMENTAL_CRON_HOUR", default=4),
             minute=env.int("SYNC_INCREMENTAL_CRON_MINUTE", default=0),
         ),
+    },
+    "worker-heartbeat": {
+        "task": "apps.sync.tasks.maintenance.worker_heartbeat",
+        "schedule": 60.0,
+    },
+    "stale-sync-job-scan": {
+        "task": "apps.sync.tasks.maintenance.scan_stale_sync_jobs",
+        "schedule": 300.0,
     },
 }
 
@@ -251,6 +352,16 @@ BANGUMI_IMAGE_MAX_BYTES = env.int(
     default=10 * 1024 * 1024,
 )
 
+VNDB_API_BASE_URL = env(
+    "VNDB_API_BASE_URL",
+    default="https://api.vndb.org/kana",
+)
+VNDB_USER_AGENT = env(
+    "VNDB_USER_AGENT",
+    default="Noshiro_5794/noshiro_db (https://github.com/noshiro-5794)",
+)
+VNDB_TIMEOUT = env.float("VNDB_TIMEOUT", default=30)
+
 AI_AGENT_API_BASE_URL = env(
     "AI_AGENT_API_BASE_URL",
     default="https://api.siliconflow.cn/v1/chat/completions",
@@ -264,6 +375,15 @@ AI_AGENT_MODEL = env(
 )
 
 AI_AGENT_TIMEOUT = env.float("AI_AGENT_TIMEOUT", default=30)
+
+OUTBOUND_PROXY_URL = env("OUTBOUND_PROXY_URL", default=None)
+
+OUTBOUND_NO_PROXY_HOSTS = env_list("OUTBOUND_NO_PROXY_HOSTS")
+
+MCP_HOST = env("MCP_HOST", default="127.0.0.1")
+MCP_PORT = env.int("MCP_PORT", default=8010)
+MCP_RATE_LIMIT = env.int("MCP_RATE_LIMIT", default=60)
+MCP_RATE_WINDOW_SECONDS = env.int("MCP_RATE_WINDOW_SECONDS", default=60)
 
 HCAPTCHA_ENABLED = env.bool("HCAPTCHA_ENABLED", default=False)
 

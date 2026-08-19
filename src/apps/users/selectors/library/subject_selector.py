@@ -3,6 +3,7 @@ from django.db.models import FloatField, Q, Value
 from django.db.models.functions import Coalesce, Greatest
 
 from apps.index.constants import PRIMARY_SUBJECT_TYPES
+from apps.index.selectors.source_identity_selector import SourceIdentitySelector
 from apps.users.exceptions import UserSubjectNotFound
 from apps.users.models import (
     Review,
@@ -17,7 +18,11 @@ class SubjectSelector:
     @staticmethod
     def base_queryset():
         return UserSubject.objects.select_related("user", "subject").prefetch_related(
-            "tag_relations__tag", "rating_details"
+            "tag_relations__tag",
+            "rating_details",
+            SourceIdentitySelector.subject_prefetch(
+                lookup="subject__external_identities"
+            ),
         )
 
     @classmethod

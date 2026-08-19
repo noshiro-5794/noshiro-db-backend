@@ -7,7 +7,8 @@ from .choices import FeedPolicy, Visibility
 class CommunityPost(models.Model):
     class PostType(models.TextChoices):
         STATUS = "status", "Status"
-        SUBJECT = "subject", "Subject"
+        ENTITY = "entity", "Entity"
+        LEGACY_SUBJECT = "subject", "Legacy subject"
 
     author = models.ForeignKey(
         "users.User", on_delete=models.CASCADE, related_name="community_posts"
@@ -15,6 +16,13 @@ class CommunityPost(models.Model):
     subject = models.ForeignKey(
         "index.Subject",
         on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="community_posts",
+    )
+    entity = models.ForeignKey(
+        "index.Entity",
+        on_delete=models.PROTECT,
         null=True,
         blank=True,
         related_name="community_posts",
@@ -51,10 +59,15 @@ class CommunityPost(models.Model):
         constraints = [
             models.CheckConstraint(
                 condition=(
-                    Q(post_type="subject", subject__isnull=False)
-                    | Q(post_type="status", subject__isnull=True)
+                    Q(post_type="entity", entity__isnull=False)
+                    | Q(post_type="subject", subject__isnull=False)
+                    | Q(
+                        post_type="status",
+                        entity__isnull=True,
+                        subject__isnull=True,
+                    )
                 ),
-                name="ck_c_post_type_subject",
+                name="ck_c_post_type_target",
             )
         ]
         indexes = [
@@ -63,6 +76,9 @@ class CommunityPost(models.Model):
             ),
             models.Index(
                 fields=["subject", "-last_activity_at"], name="idx_cp_subject_active"
+            ),
+            models.Index(
+                fields=["entity", "-last_activity_at"], name="idx_cp_entity_active"
             ),
             models.Index(
                 fields=["visibility", "feed_policy", "-created_at"], name="idx_cp_feed"

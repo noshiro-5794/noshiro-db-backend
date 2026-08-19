@@ -69,6 +69,7 @@ class SyncJob(models.Model):
     class JobType(models.TextChoices):
         SUBJECT_BANGUMI = "subject_bangumi", "Subject by Bangumi"
         SUBJECT_RESYNC = "subject_resync", "Subject resync"
+        VNDB_IMPORT = "vndb_import", "VNDB import"
         CALENDAR = "calendar", "Calendar"
         INCREMENTAL = "incremental", "Incremental"
 
@@ -95,6 +96,10 @@ class SyncJob(models.Model):
     synced_count = models.PositiveIntegerField(default=0)
     skipped_count = models.PositiveIntegerField(default=0)
     failed_count = models.PositiveIntegerField(default=0)
+    attempt = models.PositiveIntegerField(default=0)
+    heartbeat_at = models.DateTimeField(null=True, blank=True)
+    lease_owner = models.CharField(max_length=256, blank=True)
+    lease_expires_at = models.DateTimeField(null=True, blank=True)
     started_at = models.DateTimeField(null=True, blank=True)
     finished_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -111,6 +116,10 @@ class SyncJob(models.Model):
                 fields=["job_type", "created_at"], name="idx_sync_job_type_created"
             ),
             models.Index(fields=["celery_task_id"], name="idx_sync_job_celery_task"),
+            models.Index(
+                fields=["status", "lease_expires_at"],
+                name="idx_sync_job_lease",
+            ),
         ]
 
     def __str__(self) -> str:

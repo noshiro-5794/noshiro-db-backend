@@ -2,6 +2,7 @@ import requests
 from django.conf import settings
 
 from apps.users.exceptions import InvalidCaptcha
+from shared.outbound import outbound_proxies
 
 
 class CaptchaService:
@@ -32,6 +33,7 @@ class CaptchaService:
                 ),
                 data=payload,
                 timeout=getattr(settings, "HCAPTCHA_TIMEOUT", 5),
+                proxies=outbound_proxies(),
             )
             response.raise_for_status()
             data = response.json()

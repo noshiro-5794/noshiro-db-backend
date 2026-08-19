@@ -1,4 +1,4 @@
-from celery import shared_task
+from celery import current_task, shared_task
 
 from apps.sync.services.incremental_sync_service import incremental_sync_service
 from apps.sync.services.sync_job_service import sync_job_service
@@ -13,6 +13,13 @@ def run_incremental_sync_task(
     batch_size: int | None = None,
     job_id: str | None = None,
 ):
+    lease_owner = f"celery:{current_task.request.id}"
+    if job_id and not sync_job_service.claim(
+        job_id=job_id,
+        lease_owner=lease_owner,
+        lease_seconds=3900,
+    ):
+        return {"skipped": True, "reason": "job already claimed"}
     try:
         if task_name:
             result = incremental_sync_service.sync_task(
@@ -29,8 +36,13 @@ def run_incremental_sync_task(
             job_id=job_id,
             result=result,
             current_label="Incremental sync completed",
+            lease_owner=lease_owner,
         )
         return result
     except Exception as exc:
-        sync_job_service.mark_failed(job_id=job_id, error=exc)
+        sync_job_service.mark_failed(
+            job_id=job_id,
+            error=exc,
+            lease_owner=lease_owner,
+        )
         raise

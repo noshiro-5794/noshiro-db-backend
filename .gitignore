@@ -49,9 +49,7 @@ htmlcov/
 
 # Project-local artifacts
 tmp/
+.docker-data/
+backups/
 cookies.txt
 *_cookies.txt
-avatar.jpg
-avatar.jpeg
-avatar.png
-avatar.webp

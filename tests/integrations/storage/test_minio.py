@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 from django.core.exceptions import ImproperlyConfigured
@@ -39,3 +39,21 @@ def test_minio_public_url_does_not_initialize_sdk_client() -> None:
             "http://127.0.0.1:9000/test/avatars/example.webp"
         )
         minio_factory.assert_not_called()
+
+
+def test_delete_public_url_removes_only_owned_bucket_objects() -> None:
+    sdk_client = Mock()
+    client = MinioClient(client=sdk_client)
+    client._bucket_ready = True
+
+    assert client.delete_public_url("http://127.0.0.1:9000/test/avatars/example.webp")
+    sdk_client.remove_object.assert_called_once_with(
+        "test",
+        "avatars/example.webp",
+    )
+
+    sdk_client.reset_mock()
+    assert not client.delete_public_url(
+        "http://127.0.0.1:9000/other/avatars/example.webp"
+    )
+    sdk_client.remove_object.assert_not_called()

@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand, CommandError
 
-from apps.sync.exceptions import SyncException
+from apps.sync.exceptions import SyncOperationError
 from apps.sync.services.manual_sync_service import manual_subject_sync_service
 
 
@@ -30,7 +30,7 @@ class Command(BaseCommand):
                 result = manual_subject_sync_service.sync_by_bangumi_id(
                     bangumi_id=options["bangumi_id"],
                 )
-        except SyncException as exc:
+        except SyncOperationError as exc:
             raise CommandError(str(exc)) from exc
 
         self.stdout.write(self.style.SUCCESS("Subject sync finished."))

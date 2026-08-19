@@ -27,12 +27,13 @@ test_environment = {
     "DATABASE_SSL_REQUIRE": "False",
     "DATABASE_URL": test_database_url,
     "DJANGO_ALLOWED_HOSTS": "testserver,localhost",
-    "DJANGO_SECRET_KEY": "test-only-secret-key",
+    "DJANGO_SECRET_KEY": "test-only-secret-key-with-at-least-32-bytes",
     "MINIO_ACCESS_KEY": "test",
     "MINIO_BUCKET": "test",
     "MINIO_ENDPOINT": "127.0.0.1:9000",
     "MINIO_PUBLIC_URL": "http://127.0.0.1:9000",
     "MINIO_SECRET_KEY": "test",
+    "OUTBOUND_PROXY_URL": "",
 }
 
 os.environ.update(test_environment)

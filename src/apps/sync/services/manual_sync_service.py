@@ -3,9 +3,11 @@ from uuid import UUID
 
 from apps.index.models import Subject
 from apps.sync.exceptions import SyncSubjectNotFound, SyncSubjectNotSupported
+from apps.sync.providers.bangumi import BANGUMI_SUBJECT_NAMESPACE
 from apps.sync.services.character_service import character_service
 from apps.sync.services.episode_service import episode_service
 from apps.sync.services.relation_service import relation_service
+from apps.sync.services.source_record_service import source_identity_service
 from apps.sync.services.staff_service import staff_service
 from apps.sync.services.subject_service import subject_service
 from apps.sync.services.sync_job_service import sync_job_service
@@ -45,7 +47,7 @@ class ManualSubjectSyncService:
         except Subject.DoesNotExist as exc:
             raise SyncSubjectNotFound() from exc
 
-        bangumi_id = ManualSubjectSyncService._get_bangumi_subject_id(subject)
+        bangumi_id = ManualSubjectSyncService.get_bangumi_subject_id(subject)
         return ManualSubjectSyncService.sync_by_bangumi_id(
             bangumi_id=bangumi_id,
             job_id=job_id,
@@ -124,12 +126,17 @@ class ManualSubjectSyncService:
         return data
 
     @staticmethod
-    def _get_bangumi_subject_id(subject: Subject) -> int:
-        if subject.info_source != subject_service.INFO_SOURCE:
+    def get_bangumi_subject_id(subject: Subject) -> int:
+        external_id = source_identity_service.resolve_subject_external_id(
+            subject=subject,
+            namespace_spec=BANGUMI_SUBJECT_NAMESPACE,
+            legacy_source=subject_service.INFO_SOURCE,
+        )
+        if external_id is None:
             raise SyncSubjectNotSupported()
 
         try:
-            return int(subject.id_source)
+            return int(external_id)
         except (TypeError, ValueError) as exc:
             raise SyncSubjectNotSupported() from exc
 

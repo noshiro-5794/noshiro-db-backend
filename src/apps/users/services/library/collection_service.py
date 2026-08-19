@@ -14,10 +14,11 @@ class CollectionService:
     @staticmethod
     def _get_my_user_subject_or_raise(*, user, user_subject_id: int):
         user_subject = (
-            UserSubject.objects.select_related("user", "subject")
+            UserSubject.objects.select_related("user", "entity")
             .filter(
                 id=user_subject_id,
                 user=user,
+                entity__isnull=False,
             )
             .first()
         )
@@ -229,11 +230,20 @@ class CollectionService:
             item.relation = relation
             item.save(update_fields=["order", "relation"])
 
-        item = CollectionItem.objects.select_related(
-            "collection",
-            "user_subject",
-            "user_subject__subject",
-        ).get(id=item.id)
+        item = (
+            CollectionItem.objects.select_related(
+                "collection",
+                "user_subject",
+                "user_subject__entity",
+                "user_subject__entity__work",
+            )
+            .prefetch_related(
+                "user_subject__entity__names",
+                "user_subject__entity__media__asset",
+                "user_subject__entity__index_memberships__collection",
+            )
+            .get(id=item.id)
+        )
 
         if created:
             ActivityService.create_collection_item_added_activity(

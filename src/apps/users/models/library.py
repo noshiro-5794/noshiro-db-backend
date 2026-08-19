@@ -3,6 +3,8 @@ from django.db.models import Q
 
 
 class UserSubject(models.Model):
+    """User library entry; the legacy name remains during the v1 transition."""
+
     class Status(models.TextChoices):
         DOING = "doing", "Doing"
         WISH = "wish", "Wish"
@@ -14,7 +16,18 @@ class UserSubject(models.Model):
         "users.User", on_delete=models.CASCADE, related_name="subjects"
     )
     subject = models.ForeignKey(
-        "index.Subject", on_delete=models.CASCADE, related_name="users"
+        "index.Subject",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="users",
+    )
+    entity = models.ForeignKey(
+        "index.Entity",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="user_library_entries",
     )
     status = models.CharField(max_length=16, choices=Status.choices)
     simple_rating = models.PositiveSmallIntegerField(null=True, blank=True)
@@ -30,6 +43,11 @@ class UserSubject(models.Model):
         db_table = "user_subject"
         constraints = [
             models.UniqueConstraint(fields=["user", "subject"], name="uq_user_subject"),
+            models.UniqueConstraint(
+                fields=["user", "entity"],
+                condition=Q(entity__isnull=False),
+                name="uq_user_library_entity",
+            ),
             models.CheckConstraint(
                 condition=Q(simple_rating__isnull=True)
                 | (Q(simple_rating__gte=1) & Q(simple_rating__lte=5)),
@@ -66,7 +84,52 @@ class UserSubject(models.Model):
         ]
 
     def __str__(self) -> str:
-        return f"user={self.user_id} subject={self.subject_id} status={self.status}"
+        return (
+            f"user={self.user_id} entity={self.entity_id or self.subject_id} "
+            f"status={self.status}"
+        )
+
+
+class UserRelease(models.Model):
+    class Status(models.TextChoices):
+        PLANNED = "planned", "Planned"
+        IN_PROGRESS = "in_progress", "In progress"
+        COMPLETED = "completed", "Completed"
+        DROPPED = "dropped", "Dropped"
+
+    library_entry = models.ForeignKey(
+        "UserSubject",
+        on_delete=models.CASCADE,
+        related_name="release_states",
+    )
+    release = models.ForeignKey(
+        "index.Release",
+        on_delete=models.PROTECT,
+        related_name="user_states",
+    )
+    status = models.CharField(max_length=16, choices=Status.choices)
+    language = models.CharField(max_length=35, blank=True)
+    platform = models.CharField(max_length=64, blank=True)
+    note = models.TextField(blank=True)
+    started_at = models.DateField(null=True, blank=True)
+    completed_at = models.DateField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "user_release"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["library_entry", "release"],
+                name="uq_user_library_release",
+            ),
+            models.CheckConstraint(
+                condition=Q(started_at__isnull=True)
+                | Q(completed_at__isnull=True)
+                | Q(started_at__lte=models.F("completed_at")),
+                name="ck_user_release_date_range",
+            ),
+        ]
 
 
 class UserSubjectRatingDetail(models.Model):

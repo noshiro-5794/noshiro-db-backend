@@ -34,6 +34,13 @@ class Activity(models.Model):
         blank=True,
         related_name="activities",
     )
+    entity = models.ForeignKey(
+        "index.Entity",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="activities",
+    )
     user_subject = models.ForeignKey(
         "users.UserSubject",
         on_delete=models.CASCADE,

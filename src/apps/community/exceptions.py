@@ -1,101 +1,117 @@
-from shared.errors import ApplicationError
+from http import HTTPStatus
+
+from shared.exceptions import ApplicationError
 
 
-class CommunityException(ApplicationError):
-    default_code = 30000
-    default_message = "community error"
+class CommunityError(ApplicationError):
+    default_code = "community_error"
+    default_message = "The community operation could not be completed."
 
 
-class CommunityPostNotFound(CommunityException):
-    default_code = 31000
-    default_message = "community post not found"
+class CommunityPostNotFound(CommunityError):
+    default_code = "community.post_not_found"
+    default_message = "Community post not found."
+    default_status = HTTPStatus.NOT_FOUND
 
 
-class CommunityCommentNotFound(CommunityException):
-    default_code = 31100
-    default_message = "community comment not found"
+class CommunityCommentNotFound(CommunityError):
+    default_code = "community.comment_not_found"
+    default_message = "Community comment not found."
+    default_status = HTTPStatus.NOT_FOUND
 
 
-class CommunityPermissionDenied(CommunityException):
-    default_code = 31110
-    default_message = "community permission denied"
+class CommunityPermissionDenied(CommunityError):
+    default_code = "community.permission_denied"
+    default_message = "You do not have permission to perform this action."
+    default_status = HTTPStatus.FORBIDDEN
 
 
-class CommunityTargetLocked(CommunityException):
-    default_code = 31111
-    default_message = "community target is locked"
+class CommunityTargetLocked(CommunityError):
+    default_code = "community.target_locked"
+    default_message = "The community target is locked."
+    default_status = HTTPStatus.CONFLICT
 
 
-class CannotFollowSelf(CommunityException):
-    default_code = 31200
+class CannotFollowSelf(CommunityError):
+    default_code = "community.cannot_follow_self"
     default_message = "can not follow yourself"
 
 
-class FollowRelationNotFound(CommunityException):
-    default_code = 31201
-    default_message = "follow relation not found"
+class FollowRelationNotFound(CommunityError):
+    default_code = "community.follow_not_found"
+    default_message = "Follow relation not found."
+    default_status = HTTPStatus.NOT_FOUND
 
 
-class CannotFollowBlockedUser(CommunityException):
-    default_code = 31202
+class CannotFollowBlockedUser(CommunityError):
+    default_code = "community.cannot_follow_blocked_user"
     default_message = "can not follow blocked user"
 
 
-class CannotBlockSelf(CommunityException):
-    default_code = 31210
+class CannotBlockSelf(CommunityError):
+    default_code = "community.cannot_block_self"
     default_message = "can not block yourself"
 
 
-class BlockRelationNotFound(CommunityException):
-    default_code = 31211
-    default_message = "block relation not found"
+class BlockRelationNotFound(CommunityError):
+    default_code = "community.block_not_found"
+    default_message = "Block relation not found."
+    default_status = HTTPStatus.NOT_FOUND
 
 
-class CannotMuteSelf(CommunityException):
-    default_code = 31220
+class CannotMuteSelf(CommunityError):
+    default_code = "community.cannot_mute_self"
     default_message = "can not mute yourself"
 
 
-class MuteRelationNotFound(CommunityException):
-    default_code = 31221
-    default_message = "mute relation not found"
+class MuteRelationNotFound(CommunityError):
+    default_code = "community.mute_not_found"
+    default_message = "Mute relation not found."
+    default_status = HTTPStatus.NOT_FOUND
 
 
-class CommunityTargetInvalid(CommunityException):
-    default_code = 31300
+class CommunityTargetInvalid(CommunityError):
+    default_code = "community.invalid_target"
     default_message = "invalid community target"
 
 
-class CommunityTargetNotFound(CommunityException):
-    default_code = 31301
-    default_message = "community target not found"
+class CommunityTargetNotFound(CommunityError):
+    default_code = "community.target_not_found"
+    default_message = "Community target not found."
+    default_status = HTTPStatus.NOT_FOUND
 
 
-class CommunityReactionNotFound(CommunityException):
-    default_code = 31302
-    default_message = "community reaction not found"
+class CommunityReactionNotFound(CommunityError):
+    default_code = "community.reaction_not_found"
+    default_message = "Community reaction not found."
+    default_status = HTTPStatus.NOT_FOUND
 
 
-class CommunityBookmarkNotFound(CommunityException):
-    default_code = 31303
-    default_message = "community bookmark not found"
+class CommunityBookmarkNotFound(CommunityError):
+    default_code = "community.bookmark_not_found"
+    default_message = "Community bookmark not found."
+    default_status = HTTPStatus.NOT_FOUND
 
 
-class CommunityInteractionBlocked(CommunityException):
-    default_code = 31304
-    default_message = "community interaction is blocked"
+class CommunityInteractionBlocked(CommunityError):
+    default_code = "community.interaction_blocked"
+    default_message = "The community interaction is blocked."
+    default_status = HTTPStatus.FORBIDDEN
 
 
-class NotificationNotFound(CommunityException):
-    default_code = 31400
-    default_message = "notification not found"
+class NotificationNotFound(CommunityError):
+    default_code = "community.notification_not_found"
+    default_message = "Notification not found."
+    default_status = HTTPStatus.NOT_FOUND
 
 
-class CommunityReportNotFound(CommunityException):
-    default_code = 31500
-    default_message = "community report not found"
+class CommunityReportNotFound(CommunityError):
+    default_code = "community.report_not_found"
+    default_message = "Community report not found."
+    default_status = HTTPStatus.NOT_FOUND
 
 
-class CommunityReportAlreadyResolved(CommunityException):
-    default_code = 31501
-    default_message = "community report is already resolved"
+class CommunityReportAlreadyResolved(CommunityError):
+    default_code = "community.report_already_resolved"
+    default_message = "The community report is already resolved."
+    default_status = HTTPStatus.CONFLICT

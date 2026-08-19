@@ -56,12 +56,13 @@ class CommunityTargetSelector:
                 "user_subject",
                 "user_subject__user",
                 "user_subject__user__profile",
-                "user_subject__subject",
+                "user_subject__entity",
             )
             .filter(
                 id=target_id,
                 is_public=True,
                 user_subject__is_public=True,
+                user_subject__entity__isnull=False,
             )
             .first()
         )

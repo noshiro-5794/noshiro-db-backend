@@ -27,13 +27,13 @@ class CommunityCommentService:
         return {target_type: target}
 
     @staticmethod
-    def _subject_for_target(target):
+    def _entity_for_target(target):
         if isinstance(target, CommunityPost):
-            return target.subject
+            return target.entity
         if isinstance(target, Review):
-            return target.user_subject.subject
+            return target.user_subject.entity
         if isinstance(target, Activity):
-            return target.subject
+            return target.entity
         return None
 
     @staticmethod
@@ -134,7 +134,7 @@ class CommunityCommentService:
 
         activity = Activity.objects.create(
             user=author,
-            subject=cls._subject_for_target(target),
+            entity=cls._entity_for_target(target),
             comment=comment,
             activity_type=Activity.ActivityType.COMMENT_CREATED,
             message=f"Commented on a {target_type}",

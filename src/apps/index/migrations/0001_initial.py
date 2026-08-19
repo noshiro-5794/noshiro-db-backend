@@ -2,6 +2,7 @@
 
 import django.contrib.postgres.fields
 import django.contrib.postgres.indexes
+import django.contrib.postgres.operations
 import django.db.models.deletion
 import uuid
 from django.db import migrations, models
@@ -15,6 +16,7 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        django.contrib.postgres.operations.TrigramExtension(),
         migrations.CreateModel(
             name='Subject',
             fields=[

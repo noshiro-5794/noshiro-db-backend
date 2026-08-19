@@ -1,7 +1,19 @@
-from apps.index.models import Character
-from apps.sync.providers.bangumi import BangumiAPIError, bangumi_client
+from django.db import transaction
+
+from apps.index.models import Character, CharacterExternalIdentity, SourceRecord
+from apps.index.services import knowledge_ingestion_service
+from apps.sync.providers.bangumi import (
+    BANGUMI_CHARACTER_NAMESPACE,
+    BangumiAPIError,
+    bangumi_client,
+)
+from apps.sync.providers.contracts import FetchedSourceRecord
 from apps.sync.services.data_mapping import clean_string
 from apps.sync.services.name_normalizer import name_normalizer
+from apps.sync.services.source_record_service import (
+    source_identity_service,
+    source_record_service,
+)
 
 
 class CharacterService:
@@ -11,19 +23,84 @@ class CharacterService:
         data = bangumi_client.fetch_character(bangumi_id)
         if not isinstance(data, dict) or not data:
             raise BangumiAPIError("Bangumi character response must be an object.")
-        mapped_data = self._map_character_data(data)
-        character, _ = Character.objects.update_or_create(
-            info_source=self.INFO_SOURCE,
-            id_source=str(bangumi_id),
-            defaults=mapped_data,
+        recorded = source_record_service.record(
+            namespace_spec=BANGUMI_CHARACTER_NAMESPACE,
+            fetched=FetchedSourceRecord(
+                external_id=str(bangumi_id),
+                payload=data,
+                canonical_url=f"https://bgm.tv/character/{bangumi_id}",
+                schema_version="bangumi-api-v0",
+                mapper_version="bangumi-character-v1",
+            ),
         )
+        mapped_data = self._map_character_data(data)
+        with transaction.atomic():
+            external_id = str(bangumi_id)
+            character = source_identity_service.resolve_characters(
+                namespace_spec=BANGUMI_CHARACTER_NAMESPACE,
+                external_ids={external_id},
+                legacy_source=self.INFO_SOURCE,
+            ).get(external_id)
+            if character is None:
+                character = Character.objects.create(
+                    info_source=self.INFO_SOURCE,
+                    id_source=external_id,
+                    **mapped_data,
+                )
+            else:
+                for field, value in mapped_data.items():
+                    setattr(character, field, value)
+                character.save(update_fields=[*mapped_data, "updated_at"])
+            source_identity_service.bind_character(
+                character=character,
+                source_record=recorded.record,
+                match_method=CharacterExternalIdentity.MatchMethod.PROVIDER,
+            )
+            knowledge_ingestion_service.project_character(
+                character=character,
+                provider_record=recorded.record,
+                normalized_data=data,
+                mapper="bangumi.character",
+                mapper_version="bangumi-character-v1",
+            )
         return character
 
     def provide_character(self, bangumi_id: int | str) -> Character:
-        character, _ = Character.objects.get_or_create(
-            info_source=self.INFO_SOURCE,
-            id_source=str(bangumi_id),
+        external_id = str(bangumi_id)
+        record = source_record_service.ensure_record(
+            namespace_spec=BANGUMI_CHARACTER_NAMESPACE,
+            external_id=external_id,
+            origin=SourceRecord.Origin.API,
+            canonical_url=f"https://bgm.tv/character/{external_id}",
         )
+        with transaction.atomic():
+            character = source_identity_service.resolve_characters(
+                namespace_spec=BANGUMI_CHARACTER_NAMESPACE,
+                external_ids={external_id},
+                legacy_source=self.INFO_SOURCE,
+            ).get(external_id)
+            if character is None:
+                character, _ = Character.objects.get_or_create(
+                    info_source=self.INFO_SOURCE,
+                    id_source=external_id,
+                )
+            source_identity_service.bind_character(
+                character=character,
+                source_record=record,
+                match_method=CharacterExternalIdentity.MatchMethod.PROVIDER,
+            )
+            if character.entity_id is None:
+                knowledge_ingestion_service.project_character(
+                    character=character,
+                    provider_record=record,
+                    normalized_data=(
+                        record.latest_revision.payload
+                        if record.latest_revision_id
+                        else {"embedded": True, "id": external_id}
+                    ),
+                    mapper="bangumi.character",
+                    mapper_version="bangumi-character-placeholder-v1",
+                )
         return character
 
     def _map_character_data(self, data: dict) -> dict:
@@ -51,7 +128,7 @@ class CharacterService:
     def _parse_character_birth(self, data: dict) -> dict:
         birth = {}
         year = data.get("birth_year")
-        month = data.get("birth_month")
+        month = data.get("birth_mon", data.get("birth_month"))
         day = data.get("birth_day")
         if isinstance(year, int):
             birth["year"] = year

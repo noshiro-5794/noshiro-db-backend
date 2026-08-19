@@ -1,10 +1,15 @@
+import logging
+
 from django.core.exceptions import ImproperlyConfigured
 from django.core.files.uploadedfile import UploadedFile
 from django.db import IntegrityError, transaction
+from django.utils import timezone
 
 from apps.users.exceptions import AvatarUploadFailed, NicknameAlreadyExists
 from apps.users.models import User, UserProfile
 from integrations.storage.minio import ObjectStorageError, minio_client
+
+logger = logging.getLogger(__name__)
 
 
 class ProfileService:
@@ -33,6 +38,7 @@ class ProfileService:
     @classmethod
     def upload_avatar(cls, *, user: User, file_obj: UploadedFile) -> str:
         profile = cls.get_or_create_profile(user=user)
+        old_url = profile.avatar
         try:
             url = minio_client.upload_file(
                 file_obj,
@@ -42,6 +48,15 @@ class ProfileService:
             raise AvatarUploadFailed() from exc
         profile.avatar = url
         profile.save(update_fields=["avatar"])
+        if old_url and old_url != url:
+            try:
+                minio_client.delete_public_url(old_url)
+            except (ImproperlyConfigured, ObjectStorageError):
+                logger.warning(
+                    "Failed to delete previous avatar object",
+                    extra={"user_id": user.pk, "old_avatar": old_url},
+                    exc_info=True,
+                )
         return url
 
     @classmethod
@@ -55,6 +70,7 @@ class ProfileService:
         theme_color: str | None = None,
         language: str | None = None,
         appearance: str | None = None,
+        show_adult_content: bool | None = None,
     ) -> UserProfile:
         profile = cls.get_or_create_profile(user=user)
         changed_fields = []
@@ -73,6 +89,12 @@ class ProfileService:
         if appearance is not None:
             profile.appearance = appearance
             changed_fields.append("appearance")
+        if show_adult_content is not None:
+            profile.show_adult_content = show_adult_content
+            changed_fields.append("show_adult_content")
+            if show_adult_content:
+                profile.adult_content_confirmed_at = timezone.now()
+                changed_fields.append("adult_content_confirmed_at")
         if changed_fields:
             try:
                 with transaction.atomic():

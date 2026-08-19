@@ -19,7 +19,12 @@ class CommunityPostSelector:
         return CommunityPost.objects.select_related(
             "author",
             "author__profile",
-            "subject",
+            "entity",
+            "entity__work",
+        ).prefetch_related(
+            "entity__names",
+            "entity__media__asset",
+            "entity__index_memberships__collection",
         )
 
     @staticmethod
@@ -85,7 +90,7 @@ class CommunityPostSelector:
     def list_public_posts(
         cls,
         *,
-        subject_id=None,
+        entity_id=None,
         keyword=None,
         ordering="-last_activity_at",
         viewer=None,
@@ -99,8 +104,8 @@ class CommunityPostSelector:
         )
         qs = cls._apply_viewer_filters(qs, viewer=viewer)
 
-        if subject_id:
-            qs = qs.filter(subject_id=subject_id)
+        if entity_id:
+            qs = qs.filter(entity_id=entity_id)
 
         if keyword:
             keyword = keyword.strip()

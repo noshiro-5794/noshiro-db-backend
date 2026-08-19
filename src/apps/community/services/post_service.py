@@ -16,7 +16,7 @@ class CommunityPostService:
         *,
         author,
         content: str,
-        subject=None,
+        entity=None,
         visibility=Visibility.PUBLIC,
         is_spoiler=False,
         is_nsfw=False,
@@ -24,10 +24,10 @@ class CommunityPostService:
         now = timezone.now()
         post = CommunityPost.objects.create(
             author=author,
-            subject=subject,
+            entity=entity,
             post_type=(
-                CommunityPost.PostType.SUBJECT
-                if subject
+                CommunityPost.PostType.ENTITY
+                if entity
                 else CommunityPost.PostType.STATUS
             ),
             content=content,
@@ -39,7 +39,7 @@ class CommunityPostService:
         )
         Activity.objects.create(
             user=author,
-            subject=subject,
+            entity=entity,
             post=post,
             activity_type=Activity.ActivityType.POST_CREATED,
             message="Posted a status",
@@ -50,7 +50,7 @@ class CommunityPostService:
             metadata={
                 "post": {
                     "id": post.id,
-                    "subject_id": str(subject.id) if subject else None,
+                    "entity_id": str(entity.id) if entity else None,
                 }
             },
         )

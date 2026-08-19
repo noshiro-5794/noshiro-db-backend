@@ -1,13 +1,27 @@
 import logging
 
 from django.db import transaction
-from django.db.models import F
+from django.db.models import Exists, F, OuterRef, Q
 
-from apps.index.models import CalendarSubject
+from apps.index.models import (
+    AiringEvent,
+    CalendarSubject,
+    SourceRecord,
+    SubjectExternalIdentity,
+    Work,
+)
+from apps.index.services import knowledge_ingestion_service
 from apps.sync.models import SyncError
-from apps.sync.providers.bangumi import BangumiAPIError, bangumi_client
+from apps.sync.providers.bangumi import (
+    BANGUMI_CALENDAR_NAMESPACE,
+    BANGUMI_SUBJECT_NAMESPACE,
+    BangumiAPIError,
+    bangumi_client,
+)
+from apps.sync.providers.contracts import FetchedSourceRecord
 from apps.sync.services.calendar_image_service import calendar_image_service
 from apps.sync.services.manual_sync_service import manual_subject_sync_service
+from apps.sync.services.source_record_service import source_record_service
 from apps.sync.services.subject_service import subject_service
 from apps.sync.services.sync_job_service import sync_job_service
 
@@ -40,6 +54,7 @@ class CalendarSyncService:
         detail_synced_count = 0
         detail_failed_count = 0
         calendar_entries_by_subject_id: dict[str, CalendarSubject] = {}
+        airing_events: list[AiringEvent] = []
         valid_item_count = cls._count_calendar_items(data)
         if valid_item_count == 0:
             raise BangumiAPIError(
@@ -50,7 +65,6 @@ class CalendarSyncService:
             total_count=valid_item_count,
             current_label="Syncing calendar subjects",
         )
-
         for weekday_group in data:
             if not isinstance(weekday_group, dict):
                 continue
@@ -105,6 +119,21 @@ class CalendarSyncService:
                         collection_doing=collection_doing,
                         image_url=calendar_image_url,
                     )
+                    work = Work.objects.filter(entity_id=subject.pk).first()
+                    if work is not None:
+                        weekday_number = cls._weekday_number(weekday)
+                        airing_events.append(
+                            AiringEvent(
+                                work=work,
+                                weekday=weekday_number,
+                                precision=(
+                                    AiringEvent.Precision.WEEKDAY
+                                    if weekday_number is not None
+                                    else AiringEvent.Precision.UNKNOWN
+                                ),
+                                raw_value=cls._weekday_raw_value(weekday),
+                            )
+                        )
 
                     synced_subject_count += 1
                     sync_job_service.advance(
@@ -141,7 +170,31 @@ class CalendarSyncService:
                 "Calendar refresh produced no valid entries; existing rows were kept."
             )
 
-        cls._replace_calendar(calendar_entries=calendar_entries)
+        with transaction.atomic():
+            calendar_recorded = source_record_service.record(
+                namespace_spec=BANGUMI_CALENDAR_NAMESPACE,
+                fetched=FetchedSourceRecord(
+                    external_id="weekly",
+                    payload={"groups": data},
+                    canonical_url="https://bgm.tv/calendar",
+                    schema_version="bangumi-api-v0",
+                    mapper_version="bangumi-calendar-v1",
+                ),
+            )
+            calendar_observation = knowledge_ingestion_service.record_observation(
+                provider_record=calendar_recorded.record,
+                mapper="bangumi.calendar",
+                mapper_version="bangumi-calendar-v1",
+                normalized_data={"groups": data},
+                schema_name="index.schedule",
+                schema_version="1",
+            )
+            for event in airing_events:
+                event.observation = calendar_observation
+            cls._replace_calendar(
+                calendar_entries=calendar_entries,
+                airing_events=airing_events,
+            )
         sync_job_service.set_total(
             job_id=job_id,
             total_count=item_count
@@ -151,8 +204,11 @@ class CalendarSyncService:
 
         if sync_subject_details:
             for calendar_entry in calendar_entries:
-                bangumi_id = int(calendar_entry.subject.id_source)
+                bangumi_id: int | None = None
                 try:
+                    bangumi_id = manual_subject_sync_service.get_bangumi_subject_id(
+                        calendar_entry.subject
+                    )
                     if verbose:
                         logger.info(
                             "Calendar subject detail sync started",
@@ -175,13 +231,20 @@ class CalendarSyncService:
                     detail_failed_count += 1
                     logger.exception(
                         "Calendar subject detail sync failed",
-                        extra={"bangumi_id": bangumi_id},
+                        extra={
+                            "bangumi_id": bangumi_id,
+                            "subject_id": str(calendar_entry.subject_id),
+                        },
                     )
-                    cls._record_error(bangumi_id=bangumi_id)
+                    if bangumi_id is not None:
+                        cls._record_error(bangumi_id=bangumi_id)
                     sync_job_service.advance(
                         job_id=job_id,
                         failed=1,
-                        current_label=f"Failed calendar subject details {bangumi_id}",
+                        current_label=(
+                            "Failed calendar subject details "
+                            f"{bangumi_id or calendar_entry.subject_id}"
+                        ),
                     )
                     if verbose:
                         logger.info(
@@ -221,13 +284,61 @@ class CalendarSyncService:
         return total
 
     @staticmethod
+    def _weekday_number(weekday: dict) -> int | None:
+        value = weekday.get("id")
+        if isinstance(value, int) and not isinstance(value, bool) and 1 <= value <= 7:
+            return value
+        name = str(weekday.get("en") or "").strip().lower()[:3]
+        return {
+            "mon": 1,
+            "tue": 2,
+            "wed": 3,
+            "thu": 4,
+            "fri": 5,
+            "sat": 6,
+            "sun": 7,
+        }.get(name)
+
+    @staticmethod
+    def _weekday_raw_value(weekday: dict) -> str:
+        for key in ("en", "ja", "cn"):
+            value = weekday.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()[:256]
+        return ""
+
+    @staticmethod
     @transaction.atomic
-    def _replace_calendar(*, calendar_entries: list[CalendarSubject]) -> None:
-        CalendarSubject.objects.filter(
-            subject__info_source=subject_service.INFO_SOURCE,
+    def _replace_calendar(
+        *,
+        calendar_entries: list[CalendarSubject],
+        airing_events: list[AiringEvent],
+    ) -> None:
+        bangumi_identities = SubjectExternalIdentity.objects.filter(
+            subject_id=OuterRef("subject_id"),
+            source_record__namespace__provider__slug=(
+                BANGUMI_SUBJECT_NAMESPACE.source.slug
+            ),
+            source_record__namespace__slug=BANGUMI_SUBJECT_NAMESPACE.slug,
+        )
+        CalendarSubject.objects.annotate(
+            has_bangumi_identity=Exists(bangumi_identities),
+            has_active_bangumi_identity=Exists(
+                bangumi_identities.filter(
+                    source_record__status=SourceRecord.Status.ACTIVE
+                )
+            ),
+        ).filter(
+            Q(has_active_bangumi_identity=True)
+            | Q(
+                has_bangumi_identity=False,
+                subject__info_source=subject_service.INFO_SOURCE,
+            )
         ).delete()
         if calendar_entries:
             CalendarSubject.objects.bulk_create(calendar_entries)
+        if airing_events:
+            AiringEvent.objects.bulk_create(airing_events, ignore_conflicts=True)
 
     @classmethod
     def _record_error(cls, *, bangumi_id: int) -> None:

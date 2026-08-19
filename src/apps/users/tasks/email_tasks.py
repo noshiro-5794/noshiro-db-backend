@@ -3,9 +3,12 @@ from html import escape
 import resend
 from celery import shared_task
 from django.conf import settings
+from django.utils import timezone
 from requests import RequestException
 from resend.exceptions import ApplicationError as ResendApplicationError
 from resend.exceptions import RateLimitError
+
+from apps.users.models import EmailVerification
 
 BRAND_NAME = "Noshiro DB"
 BRAND_TAGLINE = "Collect · Preserve · Relive"
@@ -166,7 +169,16 @@ def build_verification_html(code: str, purpose: str | None = None) -> str:
     retry_backoff_max=60,
     retry_kwargs={"max_retries": 3},
 )
-def send_verification_email(email: str, code: str, purpose: str | None = None) -> None:
+def send_verification_email(verification_id: int) -> None:
+    verification = EmailVerification.objects.filter(pk=verification_id).first()
+    if verification is None or verification.is_used:
+        return
+    if verification.expire_at < timezone.now():
+        return
+
+    email = verification.email
+    code = verification.code
+    purpose = verification.purpose
     resend.api_key = settings.RESEND_API_KEY
     copy = get_purpose_copy(purpose)
 

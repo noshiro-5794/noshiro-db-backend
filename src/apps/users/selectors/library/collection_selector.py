@@ -113,7 +113,13 @@ class CollectionSelector:
             CollectionItem.objects.select_related(
                 "collection",
                 "user_subject",
-                "user_subject__subject",
+                "user_subject__entity",
+                "user_subject__entity__work",
+            )
+            .prefetch_related(
+                "user_subject__entity__names",
+                "user_subject__entity__media__asset",
+                "user_subject__entity__index_memberships__collection",
             )
             .filter(collection=collection)
             .order_by("order", "id")
@@ -125,7 +131,13 @@ class CollectionSelector:
             CollectionItem.objects.select_related(
                 "collection",
                 "user_subject",
-                "user_subject__subject",
+                "user_subject__entity",
+                "user_subject__entity__work",
+            )
+            .prefetch_related(
+                "user_subject__entity__names",
+                "user_subject__entity__media__asset",
+                "user_subject__entity__index_memberships__collection",
             )
             .filter(
                 collection=collection,

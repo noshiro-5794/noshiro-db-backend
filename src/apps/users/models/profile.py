@@ -30,6 +30,8 @@ class UserProfile(models.Model):
         default=Appearance.AUTO,
     )
     theme_color = models.CharField(max_length=16, default="#7F6FB0")
+    show_adult_content = models.BooleanField(default=False)
+    adult_content_confirmed_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         db_table = "user_profile"
