@@ -1,9 +1,16 @@
 from http import HTTPStatus
 from urllib.parse import quote
 
+from django.conf import settings
+
+
+def problem_type_uri(code: str) -> str:
+    """Return a stable RFC 9457 problem type URI from configured settings."""
+    base_uri = getattr(settings, "PROBLEM_BASE_URI", "").rstrip("/")
+    return f"{base_uri}/{quote(code, safe='._-')}"
+
 
 class ApplicationError(Exception):
-    PROBLEM_BASE_URI = "https://noshiro.moe/problems/"
     default_code = "application_error"
     default_message = "The request could not be completed."
     default_status = HTTPStatus.BAD_REQUEST
@@ -23,4 +30,4 @@ class ApplicationError(Exception):
     @property
     def problem_type(self) -> str:
         """Stable public problem type URI for RFC 9457 responses."""
-        return f"{self.PROBLEM_BASE_URI}{quote(self.code, safe='._-')}"
+        return problem_type_uri(self.code)

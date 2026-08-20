@@ -94,6 +94,7 @@ except ValueError as exc:
 
 https_url_settings = {
     "FRONTEND_SITE_URL": FRONTEND_SITE_URL,
+    "PROBLEM_BASE_URI": PROBLEM_BASE_URI,
     "MINIO_PUBLIC_URL": MINIO_PUBLIC_URL,
 }
 invalid_https_settings = [

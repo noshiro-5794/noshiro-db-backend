@@ -8,7 +8,7 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import exception_handler
 
-from shared.exceptions import ApplicationError
+from shared.exceptions import ApplicationError, problem_type_uri
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +81,7 @@ def custom_exception_handler(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         detail="An unexpected error occurred.",
         extensions=request_extensions,
-        problem_type="https://noshiro.moe/problems/internal-server-error",
+        problem_type=problem_type_uri("internal-server-error"),
     )
 
 

@@ -321,7 +321,12 @@ RESEND_API_KEY = env("RESEND_API_KEY", default=None)
 
 EMAIL_FROM = env("EMAIL_FROM", default="noreply@noshiro.moe")
 
-FRONTEND_SITE_URL = env("FRONTEND_SITE_URL", default="https://noshiro.moe")
+FRONTEND_SITE_URL = env("FRONTEND_SITE_URL", default="https://app.noshiro.moe")
+
+PROBLEM_BASE_URI = env(
+    "PROBLEM_BASE_URI",
+    default=f"{FRONTEND_SITE_URL.rstrip('/')}/problems/",
+)
 
 BANGUMI_API_BASE_URL = env(
     "BANGUMI_API_BASE_URL",

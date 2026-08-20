@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.test import override_settings
 from rest_framework import status
 from rest_framework.exceptions import APIException, ValidationError
@@ -29,7 +30,7 @@ def test_application_error_uses_its_public_code_and_message() -> None:
 
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     assert response.data == {
-        "type": "https://noshiro.moe/problems/example.application_error",
+        "type": f"{settings.PROBLEM_BASE_URI.rstrip('/')}/example.application_error",
         "title": "Bad Request",
         "status": 400,
         "detail": "example error",
@@ -43,7 +44,7 @@ def test_domain_error_controls_problem_status_and_type() -> None:
 
     assert response.status_code == status.HTTP_404_NOT_FOUND
     assert response.data["type"] == (
-        "https://noshiro.moe/problems/index.subject_not_found"
+        f"{settings.PROBLEM_BASE_URI.rstrip('/')}/index.subject_not_found"
     )
     assert response.data["code"] == "index.subject_not_found"
 
@@ -84,7 +85,7 @@ def test_unhandled_exception_uses_the_safe_public_response() -> None:
 
     assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
     assert response.data == {
-        "type": "https://noshiro.moe/problems/internal-server-error",
+        "type": f"{settings.PROBLEM_BASE_URI.rstrip('/')}/internal-server-error",
         "title": "Internal Server Error",
         "status": 500,
         "detail": "An unexpected error occurred.",
