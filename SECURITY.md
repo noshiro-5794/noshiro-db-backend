@@ -2,8 +2,8 @@
 
 ## Reporting a Vulnerability
 
-Do not open a public issue for security vulnerabilities. Report them directly to
-the project maintainer at `hangyuan2005@gmail.com`.
+Do not open a public issue for security vulnerabilities. Use GitHub's private
+vulnerability reporting on the repository Security tab instead.
 
 Include:
 
