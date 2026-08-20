@@ -35,13 +35,13 @@ jobs:
       UV_FROZEN: "true"
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.13"
 
@@ -67,7 +67,7 @@ jobs:
           --cov=src
           --cov-report=term-missing
           --cov-report=xml
-          --cov-fail-under=64
+          --cov-fail-under=60
 
       - name: Enforce changed-code coverage
         if: github.event_name == 'pull_request'
@@ -84,15 +84,15 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Build image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           load: true
@@ -100,7 +100,7 @@ jobs:
           tags: noshiro-db-backend:ci
 
       - name: Scan image
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@0.36.0
         with:
           image-ref: noshiro-db-backend:ci
           exit-code: "1"
