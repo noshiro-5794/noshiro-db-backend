@@ -80,6 +80,17 @@ def test_extracts_only_explicit_vndb_identifiers() -> None:
     }
 
 
+def test_extract_ignores_non_url_text_that_looks_like_protocol_relative_ipv6() -> None:
+    payload = {
+        "description": (
+            "// Connecting to [ PROJECT_0/1 ] ...\r\n"
+            "// Connecting to [ PROJECT_0/1 ] ..."
+        )
+    }
+
+    assert CrossProviderIdentityService.extract_vndb_ids(payload) == set()
+
+
 def test_official_vndb_identifier_creates_audited_reversible_binding() -> None:
     service = CrossProviderIdentityService()
     bangumi = _work(Work.WorkType.GAME)

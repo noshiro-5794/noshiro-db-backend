@@ -129,6 +129,8 @@ class CrossProviderIdentityService:
         if vndb_context and cls.VNDB_ID_PATTERN.fullmatch(text):
             yield text.lower(), pointer or "/"
             return
+        if not text.startswith(("http://", "https://")):
+            return
         parsed = urlparse(text)
         if (
             parsed.scheme not in {"http", "https"}
