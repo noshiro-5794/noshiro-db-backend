@@ -3,17 +3,12 @@ from dataclasses import dataclass
 
 from django.conf import settings
 from django.db import transaction
-from django.db.models import Case, F, IntegerField, Max, Q, When
+from django.db.models import F, IntegerField, Max
 from django.db.models.functions import Cast
 
 from apps.index.models import (
-    Character,
-    CharacterExternalIdentity,
+    ProviderRepresentation,
     SourceRecord,
-    Staff,
-    StaffExternalIdentity,
-    Subject,
-    SubjectExternalIdentity,
 )
 from apps.sync.exceptions import SyncTaskAlreadyRunning
 from apps.sync.models import SyncError, SyncState
@@ -26,7 +21,6 @@ from apps.sync.providers.bangumi import (
 from apps.sync.services.character_service import character_service
 from apps.sync.services.episode_service import episode_service
 from apps.sync.services.relation_service import relation_service
-from apps.sync.services.source_record_service import source_identity_service
 from apps.sync.services.staff_service import staff_service
 from apps.sync.services.subject_service import subject_service
 from apps.sync.services.sync_job_service import sync_job_service
@@ -269,7 +263,7 @@ class IncrementalSyncService:
                     extra={"task_name": config.task_name, "end_id": end_id},
                 )
             return result
-        except BaseException:
+        except Exception:
             cls._fail_window(task_name=config.task_name, current_id=last_synced_id)
             raise
 
@@ -322,13 +316,15 @@ class IncrementalSyncService:
     @staticmethod
     def _subject_exists(bangumi_id: int) -> bool:
         external_id = str(bangumi_id)
-        return bool(
-            source_identity_service.resolve_subject(
-                namespace_spec=BANGUMI_SUBJECT_NAMESPACE,
-                external_id=external_id,
-                legacy_source=subject_service.INFO_SOURCE,
-            )
-        )
+        return ProviderRepresentation.objects.filter(
+            provider_record__namespace__provider__slug=(
+                BANGUMI_SUBJECT_NAMESPACE.source.slug
+            ),
+            provider_record__namespace__slug=BANGUMI_SUBJECT_NAMESPACE.slug,
+            provider_record__external_id=external_id,
+            provider_record__status=SourceRecord.Status.ACTIVE,
+            is_active=True,
+        ).exists()
 
     @staticmethod
     def _sync_subject(bangumi_id: int) -> None:
@@ -432,77 +428,24 @@ class IncrementalSyncService:
 
     @staticmethod
     def _get_initial_current_id(config: IncrementalTaskConfig) -> int:
-        source_config = {
-            "subject": (
-                Subject,
-                SubjectExternalIdentity,
-                BANGUMI_SUBJECT_NAMESPACE,
-                subject_service.INFO_SOURCE,
-                Q(subject__subject_type__gt="")
-                | Q(subject__title__gt="")
-                | Q(subject__title_cn__gt=""),
-                Q(subject_type__gt="") | Q(title__gt="") | Q(title_cn__gt=""),
-            ),
-            "character": (
-                Character,
-                CharacterExternalIdentity,
-                BANGUMI_CHARACTER_NAMESPACE,
-                character_service.INFO_SOURCE,
-                Q(character__name__gt=""),
-                Q(name__gt=""),
-            ),
-            "staff": (
-                Staff,
-                StaffExternalIdentity,
-                BANGUMI_PERSON_NAMESPACE,
-                staff_service.INFO_SOURCE,
-                Q(staff__name__gt=""),
-                Q(name__gt=""),
-            ),
-        }
-        (
-            model,
-            identity_model,
-            namespace_spec,
-            info_source,
-            identity_populated_filter,
-            legacy_populated_filter,
-        ) = source_config[config.cursor_source]
-        numeric_external_id = Case(
-            When(
-                source_record__external_id__regex=r"^[0-9]+$",
-                then=Cast("source_record__external_id", IntegerField()),
-            ),
-            default=None,
-            output_field=IntegerField(),
-        )
-        identity_queryset = identity_model.objects.filter(
-            source_record__namespace__provider__slug=namespace_spec.source.slug,
-            source_record__namespace__slug=namespace_spec.slug,
-            source_record__status=SourceRecord.Status.ACTIVE,
-        )
-        has_catalog_identities = identity_queryset.exists()
-        identity_value = identity_queryset.filter(identity_populated_filter).aggregate(
-            max_source_id=Max(numeric_external_id)
-        )["max_source_id"]
-        numeric_legacy_id = Case(
-            When(
-                id_source__regex=r"^[0-9]+$",
-                then=Cast("id_source", IntegerField()),
-            ),
-            default=None,
-            output_field=IntegerField(),
-        )
-        if has_catalog_identities and identity_value:
-            return identity_value
-        if not has_catalog_identities:
-            legacy_value = (
-                model.objects.filter(info_source=info_source)
-                .filter(legacy_populated_filter)
-                .aggregate(max_source_id=Max(numeric_legacy_id))["max_source_id"]
+        namespace_spec = {
+            "subject": BANGUMI_SUBJECT_NAMESPACE,
+            "character": BANGUMI_CHARACTER_NAMESPACE,
+            "staff": BANGUMI_PERSON_NAMESPACE,
+        }[config.cursor_source]
+        numeric_external_id = Cast("external_id", IntegerField())
+        source_value = (
+            SourceRecord.objects.filter(
+                namespace__provider__slug=namespace_spec.source.slug,
+                namespace__slug=namespace_spec.slug,
+                status=SourceRecord.Status.ACTIVE,
+                external_id__regex=r"^[0-9]+$",
             )
-            if legacy_value:
-                return legacy_value
+            .annotate(numeric_external_id=numeric_external_id)
+            .aggregate(max_external_id=Max("numeric_external_id"))["max_external_id"]
+        )
+        if source_value:
+            return source_value
 
         fallback = (
             SyncState.objects.filter(

@@ -31,10 +31,10 @@ class CollectionService:
     @staticmethod
     def _get_my_user_subject_by_subject_id_or_raise(*, user, subject_id):
         user_subject = (
-            UserSubject.objects.select_related("user", "subject")
+            UserSubject.objects.select_related("user", "entity")
             .filter(
                 user=user,
-                subject_id=subject_id,
+                entity_id=subject_id,
             )
             .first()
         )

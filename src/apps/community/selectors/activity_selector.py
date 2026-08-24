@@ -19,7 +19,6 @@ class ActivitySelector:
             "user__profile",
             "target_user",
             "target_user__profile",
-            "subject",
             "entity",
             "entity__work",
             "user_subject",

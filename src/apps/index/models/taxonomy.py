@@ -1,16 +1,47 @@
 from django.db import models
 
+from .base import TimestampedModel
 
-class Genre(models.Model):
-    """Legacy projection retained for the Subject API compatibility window."""
 
-    name = models.CharField(max_length=256, unique=True)
+class TermAlias(TimestampedModel):
+    vocabulary = models.SlugField(max_length=64)
+    provider_namespace = models.ForeignKey(
+        "ProviderNamespace",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="term_aliases",
+    )
+    source_text = models.CharField(max_length=256)
+    normalized_key = models.CharField(max_length=256, db_index=True)
+    preferred_term = models.CharField(max_length=256)
+    language = models.CharField(max_length=35, blank=True)
+    script = models.CharField(max_length=4, blank=True)
+    confidence = models.DecimalField(max_digits=5, decimal_places=4, default=1)
+    is_reviewed = models.BooleanField(default=False)
 
     class Meta:
-        db_table = "genre"
+        db_table = "index_term_alias"
+        constraints = [
+            models.UniqueConstraint(
+                fields=[
+                    "vocabulary",
+                    "normalized_key",
+                    "language",
+                    "provider_namespace",
+                ],
+                name="uq_term_alias_key",
+            )
+        ]
+        indexes = [
+            models.Index(
+                fields=["vocabulary", "normalized_key"],
+                name="idx_term_alias_lookup",
+            )
+        ]
 
     def __str__(self) -> str:
-        return self.name
+        return f"{self.vocabulary}:{self.normalized_key} -> {self.preferred_term}"
 
 
 class Taxonomy(models.Model):

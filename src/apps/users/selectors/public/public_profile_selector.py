@@ -195,7 +195,9 @@ class PublicProfileSelector:
         keyword=None,
         ordering="-id",
     ):
-        qs = UserSubject.objects.select_related("user", "subject").filter(
+        qs = UserSubject.objects.select_related(
+            "user", "entity", "entity__work"
+        ).filter(
             user=user,
             is_public=True,
         )
@@ -204,14 +206,13 @@ class PublicProfileSelector:
             qs = qs.filter(status=status)
 
         if subject_type:
-            qs = qs.filter(subject__subject_type=subject_type)
+            qs = qs.filter(entity__work__work_type=subject_type)
 
         if keyword:
             keyword = keyword.strip()
             if keyword:
                 qs = qs.filter(
-                    Q(subject__title__icontains=keyword)
-                    | Q(subject__title_cn__icontains=keyword)
+                    Q(entity__names__text__icontains=keyword)
                     | Q(comment__icontains=keyword)
                 )
 
@@ -245,7 +246,7 @@ class PublicProfileSelector:
         qs = Review.objects.select_related(
             "user_subject",
             "user_subject__user",
-            "user_subject__subject",
+            "user_subject__entity",
         ).filter(
             user_subject__user=user,
             user_subject__is_public=True,
@@ -333,7 +334,7 @@ class PublicProfileSelector:
             CollectionItem.objects.select_related(
                 "collection",
                 "user_subject",
-                "user_subject__subject",
+                "user_subject__entity",
             )
             .filter(
                 collection=collection,

@@ -3,7 +3,6 @@ from django.db.models import FloatField, Q, Value
 from django.db.models.functions import Coalesce, Greatest
 
 from apps.index.constants import PRIMARY_SUBJECT_TYPES
-from apps.index.selectors.source_identity_selector import SourceIdentitySelector
 from apps.users.exceptions import UserSubjectNotFound
 from apps.users.models import (
     Review,
@@ -17,12 +16,12 @@ from apps.users.models import (
 class SubjectSelector:
     @staticmethod
     def base_queryset():
-        return UserSubject.objects.select_related("user", "subject").prefetch_related(
+        return UserSubject.objects.select_related(
+            "user", "entity", "entity__work"
+        ).prefetch_related(
             "tag_relations__tag",
             "rating_details",
-            SourceIdentitySelector.subject_prefetch(
-                lookup="subject__external_identities"
-            ),
+            "entity__names",
         )
 
     @classmethod
@@ -30,7 +29,8 @@ class SubjectSelector:
         return cls.base_queryset().get(
             id=user_subject_id,
             user=user,
-            subject__subject_type__in=PRIMARY_SUBJECT_TYPES,
+            entity__isnull=False,
+            entity__work__work_type__in=PRIMARY_SUBJECT_TYPES,
         )
 
     @classmethod
@@ -54,7 +54,8 @@ class SubjectSelector:
                 .get(
                     id=user_subject_id,
                     user=user,
-                    subject__subject_type__in=PRIMARY_SUBJECT_TYPES,
+                    entity__isnull=False,
+                    entity__work__work_type__in=PRIMARY_SUBJECT_TYPES,
                 )
             )
         except UserSubject.DoesNotExist as exc:
@@ -73,12 +74,13 @@ class SubjectSelector:
     ):
         qs = cls.base_queryset().filter(
             user=user,
-            subject__subject_type__in=PRIMARY_SUBJECT_TYPES,
+            entity__isnull=False,
+            entity__work__work_type__in=PRIMARY_SUBJECT_TYPES,
         )
         if status:
             qs = qs.filter(status=status)
         if subject_type:
-            qs = qs.filter(subject__subject_type=subject_type)
+            qs = qs.filter(entity__work__work_type=subject_type)
         if tag_id:
             qs = qs.filter(tag_relations__tag_id=tag_id).distinct()
         if keyword:
@@ -112,17 +114,15 @@ class SubjectSelector:
         zero = Value(0.0, output_field=FloatField())
         qs = qs.annotate(
             title_similarity=Coalesce(
-                TrigramSimilarity("subject__title", keyword), zero
+                TrigramSimilarity("entity__names__text", keyword), zero
             ),
             title_cn_similarity=Coalesce(
-                TrigramSimilarity("subject__title_cn", keyword), zero
+                TrigramSimilarity("entity__names__text", keyword), zero
             ),
         ).annotate(search_score=Greatest("title_similarity", "title_cn_similarity"))
 
         return qs.filter(
-            Q(subject__title__icontains=keyword)
-            | Q(subject__title_cn__icontains=keyword)
-            | Q(search_score__gte=0.15)
+            Q(entity__names__text__icontains=keyword) | Q(search_score__gte=0.15)
         )
 
     @classmethod
@@ -131,8 +131,8 @@ class SubjectSelector:
             cls.base_queryset()
             .filter(
                 user=user,
-                subject_id=subject_id,
-                subject__subject_type__in=PRIMARY_SUBJECT_TYPES,
+                entity_id=subject_id,
+                entity__work__work_type__in=PRIMARY_SUBJECT_TYPES,
             )
             .first()
         )
@@ -165,8 +165,8 @@ class SubjectSelector:
                 user_subject=user_subject,
                 is_finished=True,
             )
-            .order_by("episode__sort", "episode__ep_num", "episode_id")
-            .values_list("episode_id", flat=True)
+            .order_by("episode_entity_id")
+            .values_list("episode_entity_id", flat=True)
         )
 
         return {

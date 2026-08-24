@@ -3,20 +3,6 @@ import uuid
 from django.db import models
 
 
-class NameMapping(models.Model):
-    external_name = models.CharField(max_length=256)
-    internal_name = models.CharField(max_length=256)
-
-    class Meta:
-        db_table = "name_mapping"
-        constraints = [
-            models.UniqueConstraint(fields=["external_name"], name="uq_name_mapping"),
-        ]
-
-    def __str__(self) -> str:
-        return f"{self.external_name} -> {self.internal_name}"
-
-
 class SyncState(models.Model):
     class Status(models.TextChoices):
         IDLE = "idle", "Idle"

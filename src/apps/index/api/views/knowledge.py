@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.db.models import Prefetch
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema
@@ -303,8 +305,6 @@ class EntityEpisodeListView(APIView):
         ),
     )
     def get(self, request, entity_id):
-        from apps.index.models import Episode
-
         entity = ensure_public_entity(entity_id)
         language = request.headers.get("Accept-Language", "").split(",", 1)[0]
         adult_allowed = request_allows_adult_content(request)
@@ -322,21 +322,21 @@ class EntityEpisodeListView(APIView):
             )
             .values("to_entity_id")
         )
-        episodes = (
-            Episode.objects.filter(
-                entity_id__in=episode_entity_ids,
-                entity__isnull=False,
-                entity__visibility=Entity.Visibility.PUBLIC,
+        episode_entities = (
+            Entity.objects.filter(
+                id__in=episode_entity_ids,
+                kind=Entity.Kind.EPISODE,
+                lifecycle=Entity.Lifecycle.ACTIVE,
+                visibility=Entity.Visibility.PUBLIC,
             )
             .distinct()
-            .order_by("sort", "ep_num", "id")
+            .order_by("id")
         )
         paginator = DefaultPageNumberPagination()
         paginator.page_size = 64
-        page = paginator.paginate_queryset(episodes, request, view=self)
+        page = paginator.paginate_queryset(episode_entities, request, view=self)
         data = []
-        for episode in page:
-            episode_entity = entity_resolution_service.resolve(episode.entity)
+        for episode_entity in page:
             if not entity_resolution_service.is_public(episode_entity):
                 continue
             detail = entity_detail(
@@ -346,6 +346,18 @@ class EntityEpisodeListView(APIView):
                 adult_allowed=adult_allowed and parent_content_allowed,
             )
             descriptions = detail["descriptions"] if parent_content_allowed else []
+            facts = detail["facts"]
+
+            def fact_value(slug, *, facts=facts):
+                for fact in facts:
+                    if fact["predicate"] == slug:
+                        return fact["value"]
+                return None
+
+            duration_seconds = fact_value("duration-seconds")
+            duration = None
+            if isinstance(duration_seconds, (int, float)):
+                duration = str(timedelta(seconds=duration_seconds))
             representation = (
                 episode_entity.provider_representations.filter(is_active=True)
                 .select_related(
@@ -375,14 +387,14 @@ class EntityEpisodeListView(APIView):
                     "id": str(episode_entity.id),
                     "title": preferred_name(episode_entity, language=language),
                     "title_cn": preferred_name(episode_entity, language="zh-Hans"),
-                    "type": episode.type,
-                    "number": episode.ep_num,
-                    "sort": episode.sort,
-                    "disc": episode.disc,
-                    "duration": episode.duration,
-                    "raw_duration": episode.raw_duration,
-                    "air_date": episode.date,
-                    "comment_count": episode.comment_count,
+                    "type": fact_value("episode-type") or "",
+                    "number": fact_value("episode-number"),
+                    "sort": fact_value("sort"),
+                    "disc": fact_value("disc"),
+                    "duration": duration,
+                    "raw_duration": fact_value("raw-duration") or "",
+                    "air_date": fact_value("air-date"),
+                    "comment_count": fact_value("comment-count"),
                     "description": descriptions[0]["text"] if descriptions else "",
                     "provenance": field_provenance(
                         provider_record=(

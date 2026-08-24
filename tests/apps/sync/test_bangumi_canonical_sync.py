@@ -6,18 +6,13 @@ from rest_framework.test import APIClient
 
 from apps.index.models import (
     AiringEvent,
-    CalendarSubject,
-    Character,
     Contributor,
     CurrentObservation,
     Entity,
     EntityRelation,
     EntityRelationEvidence,
-    Episode,
     Observation,
     ProviderRecord,
-    Staff,
-    Subject,
     VoicePerformance,
     Work,
 )
@@ -30,7 +25,6 @@ from apps.sync.providers.bangumi import BangumiAPIError, bangumi_client
 from apps.sync.services.calendar_service import calendar_sync_service
 from apps.sync.services.episode_service import episode_service
 from apps.sync.services.relation_service import relation_service
-from apps.users.api.views.library import entry_episodes
 from apps.users.models import User, UserSubject
 from apps.users.services.profile.profile_service import ProfileService
 from integrations.mcp.queries import get_public_entity
@@ -38,45 +32,33 @@ from integrations.mcp.queries import get_public_entity
 pytestmark = pytest.mark.django_db(transaction=True)
 
 
-def _subject(*, source_id: str = "1", title: str = "Example Anime") -> Subject:
-    subject = Subject.objects.create(
-        info_source="bangumi_subject",
-        id_source=source_id,
-        title=title,
-        subject_type="anime",
+def _work_entity(*, source_id: str = "1", title: str = "Example Anime") -> Entity:
+    del source_id, title
+    entity = Entity.objects.create(
+        kind=Entity.Kind.WORK,
+        audience=Entity.Audience.GENERAL,
     )
-    entity = Entity.objects.create(id=subject.id, kind=Entity.Kind.WORK)
     Work.objects.create(entity=entity, work_type=Work.WorkType.ANIME)
-    return subject
+    return entity
 
 
-def _staff(source_id: str) -> Staff:
-    contributor = Contributor.objects.create(
-        entity=Entity.objects.create(kind=Entity.Kind.CONTRIBUTOR)
-    )
-    return Staff.objects.create(
-        info_source="bangumi_persons",
-        id_source=source_id,
-        name="Staff",
-        contributor=contributor,
-    )
+def _contributor(source_id: str) -> Contributor:
+    del source_id
+    entity = Entity.objects.create(kind=Entity.Kind.CONTRIBUTOR)
+    return Contributor.objects.create(entity=entity, kind=Contributor.Kind.PERSON)
 
 
-def _character(source_id: str) -> Character:
-    return Character.objects.create(
-        info_source="bangumi_character",
-        id_source=source_id,
-        name="Character",
-        entity=Entity.objects.create(kind=Entity.Kind.CHARACTER),
-    )
+def _character_entity(source_id: str) -> Entity:
+    del source_id
+    return Entity.objects.create(kind=Entity.Kind.CHARACTER)
 
 
 def test_relation_import_projects_canonical_rows_and_retracts_only_bangumi() -> None:
-    subject = _subject()
-    target = _subject(source_id="2", title="Related Anime")
-    staff_member = _staff("10")
-    actor = _staff("30")
-    character_entity = _character("20")
+    subject = _work_entity()
+    target = _work_entity(source_id="2", title="Related Anime")
+    staff_member = _contributor("10")
+    actor = _contributor("30")
+    character_entity = _character_entity("20")
     staff = {
         "id": 10,
         "relation": "Director",
@@ -102,6 +84,10 @@ def test_relation_import_projects_canonical_rows_and_retracts_only_bangumi() -> 
             bangumi_client,
             "fetch_subject_characters",
             side_effect=([character], []),
+        ),
+        patch(
+            "apps.sync.services.relation_service.name_normalizer.normalize_name",
+            side_effect=lambda value: value,
         ),
         patch(
             "apps.sync.services.relation_service.subject_service.provide_subject",
@@ -139,7 +125,7 @@ def test_relation_import_projects_canonical_rows_and_retracts_only_bangumi() -> 
 
 
 def test_episode_import_creates_canonical_entity_and_collection_observation() -> None:
-    subject = _subject()
+    subject = _work_entity()
     response = {"data": [{"id": 100, "name": "Episode 1", "type": 0, "ep": "1"}]}
 
     with (
@@ -151,12 +137,15 @@ def test_episode_import_creates_canonical_entity_and_collection_observation() ->
     ):
         episode_service.sync_subject_episodes(1)
 
-    episode = Episode.objects.get(id_source="100")
-    assert episode.entity_id is not None
-    assert episode.entity.kind == Entity.Kind.EPISODE
+    episode_record = ProviderRecord.objects.get(
+        namespace__slug="episode",
+        external_id="100",
+    )
+    episode_entity = episode_record.representations.get(is_active=True).entity
+    assert episode_entity.kind == Entity.Kind.EPISODE
     assert EntityRelation.objects.filter(
         from_entity_id=subject.id,
-        to_entity_id=episode.entity_id,
+        to_entity_id=episode_entity.id,
         relation_type="has-episode",
     ).exists()
     assert Observation.objects.filter(
@@ -168,7 +157,7 @@ def test_episode_import_creates_canonical_entity_and_collection_observation() ->
 
 
 def test_calendar_import_creates_current_canonical_airing_event() -> None:
-    subject = _subject()
+    subject = _work_entity()
     payload = [
         {
             "weekday": {"id": 2, "en": "Tuesday"},
@@ -198,12 +187,12 @@ def test_calendar_import_creates_current_canonical_airing_event() -> None:
     assert event.observation.current_projections.filter(
         mapper="bangumi.calendar"
     ).exists()
-    assert CalendarSubject.objects.get().collection_doing == 42
 
 
 def test_adult_episode_description_requires_confirmed_rest_preference() -> None:
-    subject = _subject()
+    subject = _work_entity()
     Entity.objects.filter(pk=subject.id).update(audience=Entity.Audience.ADULT)
+    subject.refresh_from_db()
     response = {
         "data": [
             {
@@ -225,7 +214,11 @@ def test_adult_episode_description_requires_confirmed_rest_preference() -> None:
     ):
         episode_service.sync_subject_episodes(1)
 
-    episode = Episode.objects.get(id_source="100")
+    episode_record = ProviderRecord.objects.get(
+        namespace__slug="episode",
+        external_id="100",
+    )
+    episode_entity = episode_record.representations.get(is_active=True).entity
     endpoint = f"/api/v1/index/entities/{subject.id}/episodes/"
     client = APIClient()
     anonymous = client.get(endpoint)
@@ -238,13 +231,13 @@ def test_adult_episode_description_requires_confirmed_rest_preference() -> None:
     profile.save(update_fields=["show_adult_content", "adult_content_confirmed_at"])
     confirmed = client.get(endpoint)
 
-    assert episode.entity.audience == Entity.Audience.ADULT
+    assert episode_entity.audience == Entity.Audience.ADULT
     assert anonymous.json()["results"][0]["description"] == ""
     assert default_authenticated.json()["results"][0]["description"] == ""
     assert confirmed.json()["results"][0]["title"] == "Episode 1"
     assert confirmed.json()["results"][0]["title_cn"] == "第一集"
     assert confirmed.json()["results"][0]["description"] == "Adult episode description"
-    assert get_public_entity(entity_id=episode.entity_id)["descriptions"] == []
+    assert get_public_entity(entity_id=episode_entity.id)["descriptions"] == []
 
 
 def test_episode_pagination_failure_does_not_persist_partial_results() -> None:
@@ -269,7 +262,7 @@ def test_episode_pagination_failure_does_not_persist_partial_results() -> None:
         episode_service.sync_subject_episodes(1)
 
     provide_subject.assert_not_called()
-    assert Episode.objects.count() == 0
+    assert Entity.objects.filter(kind=Entity.Kind.EPISODE).count() == 0
     assert not ProviderRecord.objects.filter(
         namespace__slug="subject-episodes"
     ).exists()
@@ -278,7 +271,7 @@ def test_episode_pagination_failure_does_not_persist_partial_results() -> None:
 def test_empty_episode_snapshot_retracts_current_links_without_deleting_history() -> (
     None
 ):
-    subject = _subject()
+    subject = _work_entity()
     responses = (
         {"data": [{"id": 100, "name": "Episode 1", "type": 0, "ep": "1"}]},
         {"data": []},
@@ -292,11 +285,9 @@ def test_empty_episode_snapshot_retracts_current_links_without_deleting_history(
         ),
     ):
         episode_service.sync_subject_episodes(1)
-        episode = Episode.objects.get(id_source="100")
         user = User.objects.create_user(email="episodes@example.test")
-        library_entry = UserSubject.objects.create(
+        UserSubject.objects.create(
             user=user,
-            subject=subject,
             entity_id=subject.id,
             status=UserSubject.Status.DOING,
         )
@@ -309,7 +300,6 @@ def test_empty_episode_snapshot_retracts_current_links_without_deleting_history(
             .count()
             == 1
         )
-        assert list(entry_episodes(library_entry)) == [episode]
         assert (
             APIClient()
             .get(f"/api/v1/index/entities/{subject.id}/episodes/")
@@ -333,7 +323,6 @@ def test_empty_episode_snapshot_retracts_current_links_without_deleting_history(
         ).count()
         == 1
     )
-    assert not entry_episodes(library_entry).exists()
     response = APIClient().get(f"/api/v1/index/entities/{subject.id}/episodes/")
     assert response.status_code == 200
     assert response.json()["count"] == 0

@@ -41,7 +41,7 @@ def test_test_database_is_isolated() -> None:
 def test_representative_database_table_names_are_stable() -> None:
     expected_tables = {
         "community.CommunityPost": "community_post",
-        "index.Subject": "subject",
+        "index.Entity": "index_entity",
         "sync.SyncJob": "sync_job",
         "users.Collection": "collection",
         "users.User": "user",

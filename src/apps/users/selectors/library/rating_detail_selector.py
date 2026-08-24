@@ -13,7 +13,7 @@ class UserSubjectRatingDetailSelector:
     @staticmethod
     def get_my_subject_by_subject_id(*, user, subject_id):
         return UserSubject.objects.filter(
-            subject_id=subject_id,
+            entity_id=subject_id,
             user=user,
         ).first()
 

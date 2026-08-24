@@ -106,16 +106,6 @@ python /app/src/manage.py bootstrap_database
 python /app/src/manage.py migrate --noinput
 ```
 
-The knowledge graph backfill supports inventory, bounded execution, status, and
-resume:
-
-```bash
-python /app/src/manage.py backfill_knowledge_graph --dry-run
-python /app/src/manage.py backfill_knowledge_graph --batch-size 500 --max-batches 10
-python /app/src/manage.py backfill_knowledge_graph --status <run_id>
-python /app/src/manage.py backfill_knowledge_graph --resume <run_id>
-```
-
 After a successful rehearsal, stop Beat, workers, and other database writers. Take a
 fresh backup, deploy the reviewed image, then run the one-off migration:
 

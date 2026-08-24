@@ -1,4 +1,3 @@
-from .anime import Anime, AnimeGenreRelation
 from .base import ContentSafety, LegacySourceModel, TimestampedModel
 from .entities import (
     AnimeProfile,
@@ -17,7 +16,6 @@ from .entities import (
     ReleaseWork,
     Work,
 )
-from .galgame import Galgame, GalgameGenreRelation
 from .knowledge import (
     AiringEvent,
     Appearance,
@@ -37,7 +35,6 @@ from .knowledge import (
     VoicePerformance,
 )
 from .operations import DataMigrationCheckpoint, DataMigrationRun
-from .people import Character, Staff
 from .resolution import (
     EntityRedirect,
     MatchCandidate,
@@ -50,8 +47,6 @@ from .resolution import (
 )
 from .sources import (
     CatalogSource,
-    CharacterExternalIdentity,
-    EpisodeExternalIdentity,
     Provider,
     ProviderNamespace,
     ProviderRecord,
@@ -59,31 +54,21 @@ from .sources import (
     SourceNamespace,
     SourceRecord,
     SourceRecordRevision,
-    StaffExternalIdentity,
-    SubjectExternalIdentity,
 )
-from .subjects import (
-    CalendarSubject,
-    Episode,
-    RelationEvidence,
-    Subject,
-    SubjectCharacterActorRelation,
-    SubjectCharacterRelation,
-    SubjectStaffRelation,
-    SubjectSubjectRelation,
+from .taxonomy import (
+    EntityTerm,
+    Taxonomy,
+    Term,
+    TermAlias,
+    TermLabel,
+    TermMapping,
 )
-from .taxonomy import EntityTerm, Genre, Taxonomy, Term, TermLabel, TermMapping
 
 __all__ = [
     "AiringEvent",
-    "Anime",
-    "AnimeGenreRelation",
     "AnimeProfile",
     "Appearance",
-    "CalendarSubject",
     "CatalogSource",
-    "Character",
-    "CharacterExternalIdentity",
     "ContentRating",
     "ContentSafety",
     "Contributor",
@@ -99,15 +84,10 @@ __all__ = [
     "EntityRelation",
     "EntityRelationEvidence",
     "EntityTerm",
-    "Episode",
-    "EpisodeExternalIdentity",
     "ExternalLink",
     "Fact",
     "FactEvidence",
-    "Galgame",
-    "GalgameGenreRelation",
     "GalgameProfile",
-    "Genre",
     "IndexCollection",
     "IndexMembership",
     "LegacySourceModel",
@@ -127,7 +107,6 @@ __all__ = [
     "ProviderRecord",
     "ProviderRepresentation",
     "ProviderRevision",
-    "RelationEvidence",
     "Release",
     "ReleaseWork",
     "ReleaseWorkEvidence",
@@ -136,16 +115,9 @@ __all__ = [
     "SourceRecord",
     "SourceRecordRevision",
     "SplitEvent",
-    "Staff",
-    "StaffExternalIdentity",
-    "Subject",
-    "SubjectCharacterActorRelation",
-    "SubjectCharacterRelation",
-    "SubjectExternalIdentity",
-    "SubjectStaffRelation",
-    "SubjectSubjectRelation",
     "Taxonomy",
     "Term",
+    "TermAlias",
     "TermLabel",
     "TermMapping",
     "TimestampedModel",

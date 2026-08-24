@@ -17,7 +17,7 @@ class UserTagSelector:
     @staticmethod
     def get_my_subject(*, user, user_subject_id: int):
         return (
-            UserSubject.objects.select_related("user", "subject")
+            UserSubject.objects.select_related("user", "entity")
             .filter(
                 user=user,
                 id=user_subject_id,
@@ -28,10 +28,10 @@ class UserTagSelector:
     @staticmethod
     def get_my_subject_by_subject_id(*, user, subject_id):
         return (
-            UserSubject.objects.select_related("user", "subject")
+            UserSubject.objects.select_related("user", "entity")
             .filter(
                 user=user,
-                subject_id=subject_id,
+                entity_id=subject_id,
             )
             .first()
         )

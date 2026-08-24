@@ -10,7 +10,6 @@ from django.utils.text import slugify
 
 from apps.index.models import (
     AnimeProfile,
-    Character,
     ContentSafety,
     Contributor,
     CurrentObservation,
@@ -20,7 +19,6 @@ from apps.index.models import (
     EntityName,
     EntityRelation,
     EntityRelationEvidence,
-    Episode,
     Fact,
     FactEvidence,
     GalgameProfile,
@@ -35,8 +33,6 @@ from apps.index.models import (
     Predicate,
     ProviderRecord,
     ProviderRepresentation,
-    Staff,
-    Subject,
     Work,
 )
 
@@ -201,13 +197,13 @@ class KnowledgeIngestionService:
         return fact
 
     @transaction.atomic
-    def project_subject(
+    def project_work_from_record(
         self,
         *,
-        subject: Subject,
         provider_record: ProviderRecord,
         normalized_data: dict[str, Any],
-        mapper_version: str = MAPPER_VERSION,
+        mapped_data: dict[str, Any],
+        mapper_version: str,
         representation_method: str = ProviderRepresentation.Method.PROVIDER,
     ) -> Entity:
         observation = self.record_observation(
@@ -218,22 +214,13 @@ class KnowledgeIngestionService:
             schema_name="index.work",
             schema_version="1",
         )
-        entity, created = Entity.objects.get_or_create(
-            id=subject.id,
-            defaults={
-                "kind": Entity.Kind.WORK,
-                "audience": (
-                    Entity.Audience.ADULT if subject.nsfw else Entity.Audience.GENERAL
-                ),
-            },
+        nsfw = bool(mapped_data.get("nsfw"))
+        entity = self._resolve_or_create_entity(
+            provider_record=provider_record,
+            kind=Entity.Kind.WORK,
+            audience=Entity.Audience.ADULT if nsfw else Entity.Audience.GENERAL,
         )
-        if not created:
-            entity.kind = Entity.Kind.WORK
-            entity.audience = (
-                Entity.Audience.ADULT if subject.nsfw else Entity.Audience.GENERAL
-            )
-            entity.save(update_fields=["kind", "audience", "updated_at"])
-        work_type = self._work_type(subject.subject_type)
+        work_type = self._work_type(mapped_data.get("subject_type"))
         work, _ = Work.objects.update_or_create(
             entity=entity,
             defaults={"work_type": work_type},
@@ -241,45 +228,43 @@ class KnowledgeIngestionService:
         if work_type == Work.WorkType.ANIME:
             AnimeProfile.objects.update_or_create(
                 work=work,
-                defaults={"episode_count": subject.total_episodes or subject.eps},
+                defaults={
+                    "episode_count": mapped_data.get("total_episodes")
+                    or mapped_data.get("eps")
+                },
             )
         elif work_type == Work.WorkType.GALGAME:
             GalgameProfile.objects.get_or_create(work=work)
 
-        ProviderRepresentation.objects.update_or_create(
+        self._upsert_provider_representation(
             provider_record=provider_record,
             entity=entity,
-            mapping_kind=ProviderRepresentation.MappingKind.EXACT,
-            defaults={
-                "method": representation_method,
-                "confidence": Decimal("1"),
-                "is_active": True,
-            },
+            representation_method=representation_method,
         )
         self._replace_provider_names(
             entity=entity,
             provider_record=provider_record,
             observation=observation,
-            original=subject.title,
-            localized=subject.title_cn,
+            original=mapped_data.get("title", ""),
+            localized=mapped_data.get("title_cn", ""),
         )
         self._upsert_description(
             entity=entity,
             provider_record=provider_record,
             observation=observation,
-            text=subject.description,
+            text=mapped_data.get("description", ""),
         )
         self._upsert_media(
             entity=entity,
             provider_record=provider_record,
             observation=observation,
-            original=subject.image_original,
-            thumbnail=subject.image_thumbnail,
+            original=mapped_data.get("image_original", ""),
+            thumbnail=mapped_data.get("image_thumbnail", ""),
         )
         self._sync_membership(entity=entity, work_type=work_type)
-        self._record_subject_facts(
+        self._record_mapped_work_facts(
             entity=entity,
-            subject=subject,
+            mapped_data=mapped_data,
             observation=observation,
         )
         self._record_bangumi_metrics(
@@ -295,12 +280,12 @@ class KnowledgeIngestionService:
         return entity
 
     @transaction.atomic
-    def project_character(
+    def project_character_from_record(
         self,
         *,
-        character: Character,
         provider_record: ProviderRecord,
         normalized_data: dict[str, Any],
+        mapped_data: dict[str, Any],
         mapper: str,
         mapper_version: str,
         representation_method: str = ProviderRepresentation.Method.PROVIDER,
@@ -313,49 +298,44 @@ class KnowledgeIngestionService:
             schema_name="index.character",
             schema_version="1",
         )
-        entity = character.entity
-        if entity is None:
-            entity = Entity.objects.create(kind=Entity.Kind.CHARACTER)
-            character.entity = entity
-            character.save(update_fields=["entity", "updated_at"])
-        ProviderRepresentation.objects.update_or_create(
+        entity = self._resolve_or_create_entity(
+            provider_record=provider_record,
+            kind=Entity.Kind.CHARACTER,
+            audience=Entity.Audience.UNKNOWN,
+        )
+        self._upsert_provider_representation(
             provider_record=provider_record,
             entity=entity,
-            mapping_kind=ProviderRepresentation.MappingKind.EXACT,
-            defaults={
-                "method": representation_method,
-                "confidence": Decimal("1"),
-                "is_active": True,
-            },
+            representation_method=representation_method,
         )
         self._replace_provider_names(
             entity=entity,
             provider_record=provider_record,
             observation=observation,
-            original=character.name,
+            original=mapped_data.get("name", ""),
         )
         self._upsert_description(
             entity=entity,
             provider_record=provider_record,
             observation=observation,
-            text=character.description,
+            text=mapped_data.get("description", ""),
         )
         self._upsert_media(
             entity=entity,
             provider_record=provider_record,
             observation=observation,
-            original=character.image_original,
-            thumbnail=character.image_thumbnail,
+            original=mapped_data.get("image_original", ""),
+            thumbnail=mapped_data.get("image_thumbnail", ""),
         )
         return entity
 
     @transaction.atomic
-    def project_staff(
+    def project_contributor_from_record(
         self,
         *,
-        staff: Staff,
         provider_record: ProviderRecord,
         normalized_data: dict[str, Any],
+        mapped_data: dict[str, Any],
         mapper: str,
         mapper_version: str,
         representation_method: str = ProviderRepresentation.Method.PROVIDER,
@@ -368,53 +348,47 @@ class KnowledgeIngestionService:
             schema_name="index.contributor",
             schema_version="1",
         )
-        contributor = staff.contributor
-        if contributor is None:
-            entity = Entity.objects.create(kind=Entity.Kind.CONTRIBUTOR)
-            contributor = Contributor.objects.create(
-                entity=entity,
-                kind=self._contributor_kind(staff.type),
-            )
-            staff.contributor = contributor
-            staff.save(update_fields=["contributor", "updated_at"])
-        else:
-            contributor.kind = self._contributor_kind(staff.type)
-            contributor.save(update_fields=["kind", "updated_at"])
-        self._sync_contributor_subtype(contributor)
-        ProviderRepresentation.objects.update_or_create(
+        entity = self._resolve_or_create_entity(
             provider_record=provider_record,
-            entity=contributor.entity,
-            mapping_kind=ProviderRepresentation.MappingKind.EXACT,
-            defaults={
-                "method": representation_method,
-                "confidence": Decimal("1"),
-                "is_active": True,
-            },
+            kind=Entity.Kind.CONTRIBUTOR,
+            audience=Entity.Audience.UNKNOWN,
+        )
+        kind = self._contributor_kind(mapped_data.get("type"))
+        contributor, _ = Contributor.objects.update_or_create(
+            entity=entity,
+            defaults={"kind": kind},
+        )
+        self._sync_contributor_subtype(contributor)
+        self._upsert_provider_representation(
+            provider_record=provider_record,
+            entity=entity,
+            representation_method=representation_method,
         )
         self._replace_provider_names(
-            entity=contributor.entity,
+            entity=entity,
             provider_record=provider_record,
             observation=observation,
-            original=staff.name,
+            original=mapped_data.get("name", ""),
         )
         self._upsert_description(
-            entity=contributor.entity,
+            entity=entity,
             provider_record=provider_record,
             observation=observation,
-            text=staff.description,
+            text=mapped_data.get("description", ""),
         )
         return contributor
 
     @transaction.atomic
-    def project_episode(
+    def project_episode_from_record(
         self,
         *,
-        episode: Episode,
+        parent_entity: Entity,
         provider_record: ProviderRecord,
         normalized_data: dict[str, Any],
+        mapped_data: dict[str, Any],
         relationship_observation: Observation,
         relationship_json_pointer: str,
-        mapper_version: str = "bangumi-episode-v1",
+        mapper_version: str,
         representation_method: str = ProviderRepresentation.Method.PROVIDER,
     ) -> Entity:
         observation = self.record_observation(
@@ -425,53 +399,63 @@ class KnowledgeIngestionService:
             schema_name="index.episode",
             schema_version="1",
         )
-        entity = episode.entity
-        parent = Entity.objects.get(pk=episode.subject_id)
-        if entity is None:
+        representation = (
+            ProviderRepresentation.objects.filter(
+                provider_record=provider_record,
+                is_active=True,
+            )
+            .select_related("entity")
+            .first()
+        )
+        if representation is not None:
+            entity = representation.entity
+        else:
             entity, created = Entity.objects.get_or_create(
-                id=uuid.uuid5(self.EPISODE_NAMESPACE, f"episode:{episode.pk}"),
+                id=uuid.uuid5(
+                    self.EPISODE_NAMESPACE,
+                    f"episode:{provider_record.external_id}",
+                ),
                 defaults={
                     "kind": Entity.Kind.EPISODE,
-                    "audience": parent.audience,
+                    "audience": parent_entity.audience,
                 },
             )
             if not created and entity.kind != Entity.Kind.EPISODE:
                 raise ValueError(
-                    f"Episode {episode.pk} entity UUID collides with {entity.kind}."
+                    f"Episode {provider_record.external_id} entity UUID collides "
+                    f"with {entity.kind}."
                 )
-            episode.entity = entity
-            episode.save(update_fields=["entity", "updated_at"])
         if (
-            parent.audience == Entity.Audience.ADULT
+            parent_entity.audience == Entity.Audience.ADULT
             and entity.audience != Entity.Audience.ADULT
         ):
             entity.audience = Entity.Audience.ADULT
             entity.save(update_fields=["audience", "updated_at"])
-        ProviderRepresentation.objects.update_or_create(
+        self._upsert_provider_representation(
             provider_record=provider_record,
             entity=entity,
-            mapping_kind=ProviderRepresentation.MappingKind.EXACT,
-            defaults={
-                "method": representation_method,
-                "confidence": Decimal("1"),
-                "is_active": True,
-            },
+            representation_method=representation_method,
         )
         self._replace_provider_names(
             entity=entity,
             provider_record=provider_record,
             observation=observation,
-            original=episode.title,
-            localized=episode.title_cn,
+            original=mapped_data.get("title", ""),
+            localized=mapped_data.get("title_cn", ""),
         )
         self._upsert_description(
             entity=entity,
             provider_record=provider_record,
             observation=observation,
-            text=episode.description,
+            text=mapped_data.get("description", ""),
+        )
+        self._record_mapped_episode_facts(
+            entity=entity,
+            mapped_data=mapped_data,
+            observation=observation,
         )
         relation, _ = EntityRelation.objects.get_or_create(
-            from_entity_id=episode.subject_id,
+            from_entity=parent_entity,
             to_entity=entity,
             relation_type="has-episode",
         )
@@ -482,6 +466,96 @@ class KnowledgeIngestionService:
             defaults={"raw_relation": "has-episode"},
         )
         return entity
+
+    def _record_mapped_episode_facts(
+        self,
+        *,
+        entity: Entity,
+        mapped_data: dict[str, Any],
+        observation: Observation,
+    ) -> None:
+        duration = mapped_data.get("duration")
+        candidates = {
+            "episode-type": mapped_data.get("type") or None,
+            "episode-number": mapped_data.get("ep_num"),
+            "sort": mapped_data.get("sort"),
+            "duration-seconds": duration.total_seconds() if duration else None,
+            "air-date": mapped_data.get("date").isoformat()
+            if mapped_data.get("date")
+            else None,
+            "disc": mapped_data.get("disc"),
+            "comment-count": mapped_data.get("comment_count"),
+            "raw-duration": mapped_data.get("raw_duration") or None,
+        }
+        for slug, value in candidates.items():
+            if value is None:
+                continue
+            if isinstance(value, Decimal):
+                value = str(value)
+            value_type = Predicate.ValueType.JSON
+            if isinstance(value, bool):
+                value_type = Predicate.ValueType.BOOLEAN
+            elif isinstance(value, (int, float)):
+                value_type = Predicate.ValueType.NUMBER
+            elif isinstance(value, str):
+                value_type = Predicate.ValueType.STRING
+            self.record_fact(
+                entity=entity,
+                observation=observation,
+                slug=slug,
+                name=slug.replace("-", " ").title(),
+                value=value,
+                value_type=value_type,
+                json_pointer=f"/{slugify(slug)}",
+            )
+
+    @staticmethod
+    def _resolve_or_create_entity(
+        *,
+        provider_record: ProviderRecord,
+        kind: str,
+        audience: str,
+    ) -> Entity:
+        representation = (
+            ProviderRepresentation.objects.filter(
+                provider_record=provider_record,
+                is_active=True,
+            )
+            .select_related("entity")
+            .first()
+        )
+        if representation is not None:
+            entity = representation.entity
+            update_fields = []
+            if entity.kind != kind:
+                entity.kind = kind
+                update_fields.append("kind")
+            if entity.audience != audience:
+                entity.audience = audience
+                update_fields.append("audience")
+            if update_fields:
+                update_fields.append("updated_at")
+                entity.save(update_fields=update_fields)
+            return entity
+        return Entity.objects.create(kind=kind, audience=audience)
+
+    @staticmethod
+    def _upsert_provider_representation(
+        *,
+        provider_record: ProviderRecord,
+        entity: Entity,
+        representation_method: str,
+    ) -> None:
+        ProviderRepresentation.objects.update_or_create(
+            provider_record=provider_record,
+            entity=entity,
+            mapping_kind=ProviderRepresentation.MappingKind.EXACT,
+            defaults={
+                "method": representation_method,
+                "confidence": Decimal("1"),
+                "is_active": True,
+            },
+        )
 
     @staticmethod
     def _work_type(subject_type: str) -> str:
@@ -600,17 +674,23 @@ class KnowledgeIngestionService:
             },
         )
 
-    def _record_subject_facts(
-        self, *, entity: Entity, subject: Subject, observation: Observation
+    def _record_mapped_work_facts(
+        self,
+        *,
+        entity: Entity,
+        mapped_data: dict[str, Any],
+        observation: Observation,
     ) -> None:
+        release_date = mapped_data.get("date")
         candidates = {
-            "release-date": subject.date.isoformat() if subject.date else None,
-            "platform": subject.platform or None,
-            "series": subject.series,
-            "volumes": subject.volumes,
-            "episode-count": subject.total_episodes or subject.eps,
-            "provider-infobox": subject.infobox or None,
-            "provider-tags": subject.tags or None,
+            "release-date": release_date.isoformat() if release_date else None,
+            "platform": mapped_data.get("platform") or None,
+            "series": mapped_data.get("series"),
+            "volumes": mapped_data.get("volumes"),
+            "episode-count": mapped_data.get("total_episodes")
+            or mapped_data.get("eps"),
+            "provider-infobox": mapped_data.get("infobox") or None,
+            "provider-tags": mapped_data.get("tags") or None,
         }
         for slug, value in candidates.items():
             if value is None:

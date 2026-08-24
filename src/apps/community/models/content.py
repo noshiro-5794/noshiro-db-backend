@@ -8,17 +8,9 @@ class CommunityPost(models.Model):
     class PostType(models.TextChoices):
         STATUS = "status", "Status"
         ENTITY = "entity", "Entity"
-        LEGACY_SUBJECT = "subject", "Legacy subject"
 
     author = models.ForeignKey(
         "users.User", on_delete=models.CASCADE, related_name="community_posts"
-    )
-    subject = models.ForeignKey(
-        "index.Subject",
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name="community_posts",
     )
     entity = models.ForeignKey(
         "index.Entity",
@@ -60,11 +52,9 @@ class CommunityPost(models.Model):
             models.CheckConstraint(
                 condition=(
                     Q(post_type="entity", entity__isnull=False)
-                    | Q(post_type="subject", subject__isnull=False)
                     | Q(
                         post_type="status",
                         entity__isnull=True,
-                        subject__isnull=True,
                     )
                 ),
                 name="ck_c_post_type_target",
@@ -73,9 +63,6 @@ class CommunityPost(models.Model):
         indexes = [
             models.Index(
                 fields=["author", "-created_at"], name="idx_cp_author_created"
-            ),
-            models.Index(
-                fields=["subject", "-last_activity_at"], name="idx_cp_subject_active"
             ),
             models.Index(
                 fields=["entity", "-last_activity_at"], name="idx_cp_entity_active"

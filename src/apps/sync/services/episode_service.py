@@ -2,9 +2,8 @@ from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 
 from django.db import transaction
-from django.utils import timezone
 
-from apps.index.models import Episode, EpisodeExternalIdentity, Subject
+from apps.index.models import Entity
 from apps.index.services import knowledge_ingestion_service
 from apps.sync.providers.bangumi import (
     BANGUMI_EPISODE_NAMESPACE,
@@ -14,10 +13,7 @@ from apps.sync.providers.bangumi import (
 )
 from apps.sync.providers.contracts import FetchedSourceRecord
 from apps.sync.services.data_mapping import clean_string
-from apps.sync.services.source_record_service import (
-    source_identity_service,
-    source_record_service,
-)
+from apps.sync.services.source_record_service import source_record_service
 from apps.sync.services.subject_service import subject_service
 
 
@@ -43,14 +39,18 @@ class EpisodeService:
             if len(data) < limit:
                 break
             offset += limit
-        subject = subject_service.provide_subject(bangumi_id)
-        self._upsert_episodes(subject, items)
+        work = subject_service.provide_subject(bangumi_id)
+        self._upsert_episodes(work, str(bangumi_id), items)
 
-    def _upsert_episodes(self, subject: Subject, data: list[dict]) -> None:
+    def _upsert_episodes(
+        self, work: Entity, subject_external_id: str, data: list[dict]
+    ) -> None:
         with transaction.atomic():
-            return self._persist_episodes(subject, data)
+            return self._persist_episodes(work, subject_external_id, data)
 
-    def _persist_episodes(self, subject: Subject, data: list[dict]) -> None:
+    def _persist_episodes(
+        self, work: Entity, subject_external_id: str, data: list[dict]
+    ) -> None:
         id_map = {}
         index_by_id = {}
         for index, item in enumerate(data):
@@ -62,9 +62,9 @@ class EpisodeService:
         collection_recorded = source_record_service.record(
             namespace_spec=BANGUMI_SUBJECT_EPISODES_NAMESPACE,
             fetched=FetchedSourceRecord(
-                external_id=subject.id_source,
+                external_id=subject_external_id,
                 payload={"items": data},
-                canonical_url=f"https://bgm.tv/subject/{subject.id_source}/ep",
+                canonical_url=f"https://bgm.tv/subject/{subject_external_id}/ep",
                 schema_version="bangumi-api-v0",
                 mapper_version="bangumi-subject-episodes-v1",
             ),
@@ -94,91 +94,12 @@ class EpisodeService:
             ],
         )
 
-        persisted_episodes = source_identity_service.resolve_episodes(
-            namespace_spec=BANGUMI_EPISODE_NAMESPACE,
-            external_ids=set(id_map),
-            legacy_source=self.INFO_SOURCE,
-        )
-        episodes_to_upsert = []
-        episodes_to_update = []
-        now = timezone.now()
         for id_source, item in id_map.items():
-            mapped = self._map_episode_data(item)
-            episode = persisted_episodes.get(id_source)
-            if episode is None:
-                episodes_to_upsert.append(
-                    Episode(
-                        info_source=self.INFO_SOURCE,
-                        id_source=id_source,
-                        subject=subject,
-                        **mapped,
-                    )
-                )
-                continue
-
-            for field, value in mapped.items():
-                setattr(episode, field, value)
-            episode.subject = subject
-            episode.updated_at = now
-            episodes_to_update.append(episode)
-
-        update_fields = [
-            "title",
-            "title_cn",
-            "type",
-            "ep_num",
-            "sort",
-            "duration",
-            "date",
-            "description",
-            "disc",
-            "comment_count",
-            "raw_duration",
-            "subject",
-            "updated_at",
-        ]
-        if episodes_to_upsert:
-            Episode.objects.bulk_create(
-                episodes_to_upsert,
-                batch_size=100,
-                update_conflicts=True,
-                update_fields=update_fields,
-                unique_fields=["info_source", "id_source"],
-            )
-        if episodes_to_update:
-            Episode.objects.bulk_update(
-                episodes_to_update,
-                fields=update_fields,
-                batch_size=100,
-            )
-
-        missing_ids = set(id_map) - set(persisted_episodes)
-        persisted_episodes.update(
-            {
-                episode.id_source: episode
-                for episode in Episode.objects.filter(
-                    info_source=self.INFO_SOURCE,
-                    id_source__in=missing_ids,
-                )
-            }
-        )
-        if set(persisted_episodes) != set(id_map):
-            missing = sorted(set(id_map) - set(persisted_episodes))
-            raise RuntimeError(
-                f"Bangumi episodes were not persisted: {', '.join(missing)}"
-            )
-        source_identity_service.bind_episodes(
-            bindings=[
-                (persisted_episodes[id_source], recorded_by_id[id_source].record)
-                for id_source in id_map
-            ],
-            match_method=EpisodeExternalIdentity.MatchMethod.PROVIDER,
-        )
-        for id_source, item in id_map.items():
-            knowledge_ingestion_service.project_episode(
-                episode=persisted_episodes[id_source],
+            knowledge_ingestion_service.project_episode_from_record(
+                parent_entity=work,
                 provider_record=recorded_by_id[id_source].record,
                 normalized_data=item,
+                mapped_data=self._map_episode_data(item),
                 relationship_observation=relationship_observation,
                 relationship_json_pointer=f"/items/{index_by_id[id_source]}",
                 mapper_version="bangumi-episode-v1",

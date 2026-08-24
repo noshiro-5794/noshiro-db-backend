@@ -1,8 +1,8 @@
+from apps.index.models import ProviderRepresentation, SourceRecord
 from apps.sync.providers.bangumi import BANGUMI_SUBJECT_NAMESPACE
 from apps.sync.services.character_service import character_service
 from apps.sync.services.episode_service import episode_service
 from apps.sync.services.relation_service import relation_service
-from apps.sync.services.source_record_service import source_identity_service
 from apps.sync.services.staff_service import staff_service
 from apps.sync.services.subject_service import subject_service
 from apps.sync.tasks.base import BaseSyncTask
@@ -10,13 +10,13 @@ from apps.sync.tasks.base import BaseSyncTask
 
 def _has_bangumi_subject(bangumi_id: int) -> bool:
     external_id = str(bangumi_id)
-    return bool(
-        source_identity_service.resolve_subject(
-            namespace_spec=BANGUMI_SUBJECT_NAMESPACE,
-            external_id=external_id,
-            legacy_source=subject_service.INFO_SOURCE,
-        )
-    )
+    return ProviderRepresentation.objects.filter(
+        provider_record__namespace__provider__slug=BANGUMI_SUBJECT_NAMESPACE.source.slug,
+        provider_record__namespace__slug=BANGUMI_SUBJECT_NAMESPACE.slug,
+        provider_record__external_id=external_id,
+        provider_record__status=SourceRecord.Status.ACTIVE,
+        is_active=True,
+    ).exists()
 
 
 class FullSubjectSyncTask(BaseSyncTask):

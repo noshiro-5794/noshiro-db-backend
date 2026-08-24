@@ -1,13 +1,13 @@
 from dataclasses import dataclass
 from uuid import UUID
 
-from apps.index.models import Subject
+from apps.index.models import ProviderRepresentation, Work
+from apps.index.selectors.projections import preferred_name
 from apps.sync.exceptions import SyncSubjectNotFound, SyncSubjectNotSupported
 from apps.sync.providers.bangumi import BANGUMI_SUBJECT_NAMESPACE
 from apps.sync.services.character_service import character_service
 from apps.sync.services.episode_service import episode_service
 from apps.sync.services.relation_service import relation_service
-from apps.sync.services.source_record_service import source_identity_service
 from apps.sync.services.staff_service import staff_service
 from apps.sync.services.subject_service import subject_service
 from apps.sync.services.sync_job_service import sync_job_service
@@ -43,11 +43,27 @@ class ManualSubjectSyncService:
         *, subject_id: UUID | str, job_id: UUID | str | None = None
     ) -> dict:
         try:
-            subject = Subject.objects.get(id=subject_id)
-        except Subject.DoesNotExist as exc:
+            representation = (
+                ProviderRepresentation.objects.filter(
+                    entity_id=subject_id,
+                    provider_record__namespace__provider__slug=(
+                        BANGUMI_SUBJECT_NAMESPACE.source.slug
+                    ),
+                    provider_record__namespace__slug=BANGUMI_SUBJECT_NAMESPACE.slug,
+                    provider_record__status="active",
+                    is_active=True,
+                )
+                .select_related("provider_record")
+                .first()
+            )
+            if representation is None:
+                raise SyncSubjectNotFound()
+        except SyncSubjectNotFound:
+            raise
+        except Exception as exc:
             raise SyncSubjectNotFound() from exc
 
-        bangumi_id = ManualSubjectSyncService.get_bangumi_subject_id(subject)
+        bangumi_id = ManualSubjectSyncService.get_bangumi_subject_id(representation)
         return ManualSubjectSyncService.sync_by_bangumi_id(
             bangumi_id=bangumi_id,
             job_id=job_id,
@@ -63,6 +79,7 @@ class ManualSubjectSyncService:
             current_label=f"Fetching subject {bangumi_id}",
         )
         subject = subject_service.upsert_subject(bangumi_id)
+        work = Work.objects.get(entity=subject)
         sync_job_service.advance(
             job_id=job_id,
             synced=1,
@@ -110,8 +127,8 @@ class ManualSubjectSyncService:
         result = ManualSubjectSyncResult(
             subject_id=str(subject.id),
             bangumi_id=bangumi_id,
-            title=subject.title,
-            subject_type=subject.subject_type,
+            title=preferred_name(subject),
+            subject_type=work.work_type,
             episode_synced=True,
             staff_count=len(staff_ids),
             character_count=len(character_ids),
@@ -126,12 +143,8 @@ class ManualSubjectSyncService:
         return data
 
     @staticmethod
-    def get_bangumi_subject_id(subject: Subject) -> int:
-        external_id = source_identity_service.resolve_subject_external_id(
-            subject=subject,
-            namespace_spec=BANGUMI_SUBJECT_NAMESPACE,
-            legacy_source=subject_service.INFO_SOURCE,
-        )
+    def get_bangumi_subject_id(representation) -> int:
+        external_id = representation.provider_record.external_id
         if external_id is None:
             raise SyncSubjectNotSupported()
 

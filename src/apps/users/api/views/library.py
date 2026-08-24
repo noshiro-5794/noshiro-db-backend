@@ -6,8 +6,12 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.index.models import Entity, Episode, Release, Subject
-from apps.index.selectors.projections import entity_summary
+from apps.index.models import Entity, Release
+from apps.index.selectors.projections import (
+    entity_detail,
+    entity_summary,
+    preferred_name,
+)
 from apps.index.services import entity_resolution_service
 from apps.users.api.serializers.contracts import (
     EpisodeProgressReplaceSerializer,
@@ -180,7 +184,6 @@ class LibraryEntryListCreateView(APIView):
             entry = UserSubject.objects.create(
                 user=request.user,
                 entity=entity,
-                subject=Subject.objects.filter(pk=entity.pk).first(),
                 **values,
             )
         else:
@@ -429,13 +432,13 @@ def entry_episodes(entry: UserSubject):
         .values("to_entity_id")
     )
     return (
-        Episode.objects.filter(
-            entity_id__in=episode_entity_ids,
-            type="EP",
-            entity__isnull=False,
+        Entity.objects.filter(
+            id__in=episode_entity_ids,
+            kind=Entity.Kind.EPISODE,
+            lifecycle=Entity.Lifecycle.ACTIVE,
         )
         .distinct()
-        .order_by("sort", "ep_num", "id")
+        .order_by("id")
     )
 
 
@@ -444,17 +447,45 @@ def episode_progress_data(*, entry: UserSubject) -> dict:
     finished_ids = set(
         UserEpisodeProgress.objects.filter(
             user_subject=entry, is_finished=True
-        ).values_list("episode_id", flat=True)
+        ).values_list("episode_entity_id", flat=True)
     )
     items = [
         {
-            "id": str(episode.entity_id),
-            "title": episode.title,
-            "title_cn": episode.title_cn,
-            "type": episode.type,
-            "number": episode.ep_num,
-            "sort": episode.sort,
-            "air_date": episode.date,
+            "id": str(episode.id),
+            "title": preferred_name(episode),
+            "title_cn": preferred_name(episode, language="zh-Hans"),
+            "type": next(
+                (
+                    fact["value"]
+                    for fact in entity_detail(episode, safe=True)["facts"]
+                    if fact["predicate"] == "episode-type"
+                ),
+                "",
+            ),
+            "number": next(
+                (
+                    fact["value"]
+                    for fact in entity_detail(episode, safe=True)["facts"]
+                    if fact["predicate"] == "episode-number"
+                ),
+                None,
+            ),
+            "sort": next(
+                (
+                    fact["value"]
+                    for fact in entity_detail(episode, safe=True)["facts"]
+                    if fact["predicate"] == "sort"
+                ),
+                None,
+            ),
+            "air_date": next(
+                (
+                    fact["value"]
+                    for fact in entity_detail(episode, safe=True)["facts"]
+                    if fact["predicate"] == "air-date"
+                ),
+                None,
+            ),
             "is_finished": episode.id in finished_ids,
         }
         for episode in episodes
@@ -492,8 +523,8 @@ class LibraryEntryEpisodeProgressView(APIView):
         serializer.is_valid(raise_exception=True)
         entry = get_library_entry(user=request.user, entry_id=entry_id, for_update=True)
         requested_ids = serializer.validated_data["finished_episode_ids"]
-        episodes = list(entry_episodes(entry).filter(entity_id__in=requested_ids))
-        if {episode.entity_id for episode in episodes} != set(requested_ids):
+        episodes = list(entry_episodes(entry).filter(id__in=requested_ids))
+        if {episode.id for episode in episodes} != set(requested_ids):
             raise ValidationError(
                 {"finished_episode_ids": "Contains an episode outside this Work."}
             )
@@ -502,7 +533,7 @@ class LibraryEntryEpisodeProgressView(APIView):
             [
                 UserEpisodeProgress(
                     user_subject=entry,
-                    episode=episode,
+                    episode_entity=episode,
                     is_finished=True,
                 )
                 for episode in episodes
@@ -524,12 +555,12 @@ class LibraryEntryEpisodeProgressItemView(APIView):
     def put(self, request, entry_id: int, episode_id):
         entry = get_library_entry(user=request.user, entry_id=entry_id, for_update=True)
         try:
-            episode = entry_episodes(entry).get(entity_id=episode_id)
-        except Episode.DoesNotExist as exc:
+            episode = entry_episodes(entry).get(pk=episode_id)
+        except Entity.DoesNotExist as exc:
             raise NotFound("Episode not found for this Work.") from exc
         UserEpisodeProgress.objects.update_or_create(
             user_subject=entry,
-            episode=episode,
+            episode_entity=episode,
             defaults={"is_finished": True},
         )
         return Response(episode_progress_data(entry=entry))
@@ -537,6 +568,6 @@ class LibraryEntryEpisodeProgressItemView(APIView):
     def delete(self, request, entry_id: int, episode_id):
         entry = get_library_entry(user=request.user, entry_id=entry_id)
         UserEpisodeProgress.objects.filter(
-            user_subject=entry, episode__entity_id=episode_id
+            user_subject=entry, episode_entity_id=episode_id
         ).delete()
         return Response(status=status.HTTP_204_NO_CONTENT)

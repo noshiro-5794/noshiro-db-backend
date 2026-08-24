@@ -12,7 +12,7 @@ class ReviewSelector:
             "user_subject",
             "user_subject__user",
             "user_subject__user__profile",
-            "user_subject__subject",
+            "user_subject__entity",
         )
 
     @staticmethod
@@ -138,7 +138,7 @@ class ReviewSelector:
     @staticmethod
     def get_my_subject(*, user, user_subject_id: int):
         return (
-            UserSubject.objects.select_related("user", "subject")
+            UserSubject.objects.select_related("user", "entity")
             .filter(
                 id=user_subject_id,
                 user=user,
@@ -149,9 +149,9 @@ class ReviewSelector:
     @staticmethod
     def get_my_subject_by_subject_id(*, user, subject_id):
         return (
-            UserSubject.objects.select_related("user", "subject")
+            UserSubject.objects.select_related("user", "entity")
             .filter(
-                subject_id=subject_id,
+                entity_id=subject_id,
                 user=user,
             )
             .first()
@@ -197,7 +197,7 @@ class ReviewSelector:
     def list_public_subject_reviews(cls, *, subject_id, viewer=None):
         qs = cls._apply_viewer_filters(
             cls.base_queryset().filter(
-                user_subject__subject_id=subject_id,
+                user_subject__entity_id=subject_id,
                 user_subject__is_public=True,
                 is_public=True,
             ),

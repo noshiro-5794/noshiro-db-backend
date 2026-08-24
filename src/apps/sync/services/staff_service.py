@@ -1,6 +1,6 @@
 from django.db import transaction
 
-from apps.index.models import SourceRecord, Staff, StaffExternalIdentity
+from apps.index.models import Contributor, ProviderRepresentation, SourceRecord
 from apps.index.services import knowledge_ingestion_service
 from apps.sync.providers.bangumi import (
     BANGUMI_PERSON_NAMESPACE,
@@ -10,16 +10,13 @@ from apps.sync.providers.bangumi import (
 from apps.sync.providers.contracts import FetchedSourceRecord
 from apps.sync.services.data_mapping import clean_string
 from apps.sync.services.name_normalizer import name_normalizer
-from apps.sync.services.source_record_service import (
-    source_identity_service,
-    source_record_service,
-)
+from apps.sync.services.source_record_service import source_record_service
 
 
 class StaffService:
     INFO_SOURCE = "bangumi_persons"
 
-    def upsert_staff(self, bangumi_id: int) -> Staff:
+    def upsert_staff(self, bangumi_id: int) -> Contributor:
         data = bangumi_client.fetch_person(bangumi_id)
         if not isinstance(data, dict) or not data:
             raise BangumiAPIError("Bangumi person response must be an object.")
@@ -35,37 +32,15 @@ class StaffService:
         )
         mapped_data = self._map_staff_data(data)
         with transaction.atomic():
-            external_id = str(bangumi_id)
-            staff = source_identity_service.resolve_staff_members(
-                namespace_spec=BANGUMI_PERSON_NAMESPACE,
-                external_ids={external_id},
-                legacy_source=self.INFO_SOURCE,
-            ).get(external_id)
-            if staff is None:
-                staff = Staff.objects.create(
-                    info_source=self.INFO_SOURCE,
-                    id_source=external_id,
-                    **mapped_data,
-                )
-            else:
-                for field, value in mapped_data.items():
-                    setattr(staff, field, value)
-                staff.save(update_fields=[*mapped_data, "updated_at"])
-            source_identity_service.bind_staff(
-                staff=staff,
-                source_record=recorded.record,
-                match_method=StaffExternalIdentity.MatchMethod.PROVIDER,
-            )
-            knowledge_ingestion_service.project_staff(
-                staff=staff,
+            return knowledge_ingestion_service.project_contributor_from_record(
                 provider_record=recorded.record,
                 normalized_data=data,
+                mapped_data=mapped_data,
                 mapper="bangumi.person",
                 mapper_version="bangumi-person-v1",
             )
-        return staff
 
-    def provide_staff(self, bangumi_id: int | str) -> Staff:
+    def provide_staff(self, bangumi_id: int | str) -> Contributor:
         external_id = str(bangumi_id)
         record = source_record_service.ensure_record(
             namespace_spec=BANGUMI_PERSON_NAMESPACE,
@@ -74,34 +49,36 @@ class StaffService:
             canonical_url=f"https://bgm.tv/person/{external_id}",
         )
         with transaction.atomic():
-            staff = source_identity_service.resolve_staff_members(
-                namespace_spec=BANGUMI_PERSON_NAMESPACE,
-                external_ids={external_id},
-                legacy_source=self.INFO_SOURCE,
-            ).get(external_id)
-            if staff is None:
-                staff, _ = Staff.objects.get_or_create(
-                    info_source=self.INFO_SOURCE,
-                    id_source=external_id,
-                )
-            source_identity_service.bind_staff(
-                staff=staff,
-                source_record=record,
-                match_method=StaffExternalIdentity.MatchMethod.PROVIDER,
+            entity = self._resolve_entity(record)
+            if (
+                entity is not None
+                and Contributor.objects.filter(entity=entity).exists()
+            ):
+                return Contributor.objects.get(entity=entity)
+            payload = (
+                record.latest_revision.payload
+                if record.latest_revision_id
+                else {"embedded": True, "id": external_id}
             )
-            if staff.contributor_id is None:
-                knowledge_ingestion_service.project_staff(
-                    staff=staff,
-                    provider_record=record,
-                    normalized_data=(
-                        record.latest_revision.payload
-                        if record.latest_revision_id
-                        else {"embedded": True, "id": external_id}
-                    ),
-                    mapper="bangumi.person",
-                    mapper_version="bangumi-person-placeholder-v1",
-                )
-        return staff
+            return knowledge_ingestion_service.project_contributor_from_record(
+                provider_record=record,
+                normalized_data=payload,
+                mapped_data=self._map_staff_data(payload),
+                mapper="bangumi.person",
+                mapper_version="bangumi-person-placeholder-v1",
+            )
+
+    @staticmethod
+    def _resolve_entity(record: SourceRecord):
+        representation = (
+            ProviderRepresentation.objects.filter(
+                provider_record=record,
+                is_active=True,
+            )
+            .select_related("entity")
+            .first()
+        )
+        return representation.entity if representation is not None else None
 
     def _map_staff_data(self, data: dict) -> dict:
         return {

@@ -1,6 +1,10 @@
 from django.db import transaction
 
-from apps.index.models import Character, CharacterExternalIdentity, SourceRecord
+from apps.index.models import (
+    Entity,
+    ProviderRepresentation,
+    SourceRecord,
+)
 from apps.index.services import knowledge_ingestion_service
 from apps.sync.providers.bangumi import (
     BANGUMI_CHARACTER_NAMESPACE,
@@ -10,16 +14,13 @@ from apps.sync.providers.bangumi import (
 from apps.sync.providers.contracts import FetchedSourceRecord
 from apps.sync.services.data_mapping import clean_string
 from apps.sync.services.name_normalizer import name_normalizer
-from apps.sync.services.source_record_service import (
-    source_identity_service,
-    source_record_service,
-)
+from apps.sync.services.source_record_service import source_record_service
 
 
 class CharacterService:
     INFO_SOURCE = "bangumi_character"
 
-    def upsert_character(self, bangumi_id: int) -> Character:
+    def upsert_character(self, bangumi_id: int) -> Entity:
         data = bangumi_client.fetch_character(bangumi_id)
         if not isinstance(data, dict) or not data:
             raise BangumiAPIError("Bangumi character response must be an object.")
@@ -35,37 +36,15 @@ class CharacterService:
         )
         mapped_data = self._map_character_data(data)
         with transaction.atomic():
-            external_id = str(bangumi_id)
-            character = source_identity_service.resolve_characters(
-                namespace_spec=BANGUMI_CHARACTER_NAMESPACE,
-                external_ids={external_id},
-                legacy_source=self.INFO_SOURCE,
-            ).get(external_id)
-            if character is None:
-                character = Character.objects.create(
-                    info_source=self.INFO_SOURCE,
-                    id_source=external_id,
-                    **mapped_data,
-                )
-            else:
-                for field, value in mapped_data.items():
-                    setattr(character, field, value)
-                character.save(update_fields=[*mapped_data, "updated_at"])
-            source_identity_service.bind_character(
-                character=character,
-                source_record=recorded.record,
-                match_method=CharacterExternalIdentity.MatchMethod.PROVIDER,
-            )
-            knowledge_ingestion_service.project_character(
-                character=character,
+            return knowledge_ingestion_service.project_character_from_record(
                 provider_record=recorded.record,
                 normalized_data=data,
+                mapped_data=mapped_data,
                 mapper="bangumi.character",
                 mapper_version="bangumi-character-v1",
             )
-        return character
 
-    def provide_character(self, bangumi_id: int | str) -> Character:
+    def provide_character(self, bangumi_id: int | str) -> Entity:
         external_id = str(bangumi_id)
         record = source_record_service.ensure_record(
             namespace_spec=BANGUMI_CHARACTER_NAMESPACE,
@@ -74,34 +53,33 @@ class CharacterService:
             canonical_url=f"https://bgm.tv/character/{external_id}",
         )
         with transaction.atomic():
-            character = source_identity_service.resolve_characters(
-                namespace_spec=BANGUMI_CHARACTER_NAMESPACE,
-                external_ids={external_id},
-                legacy_source=self.INFO_SOURCE,
-            ).get(external_id)
-            if character is None:
-                character, _ = Character.objects.get_or_create(
-                    info_source=self.INFO_SOURCE,
-                    id_source=external_id,
-                )
-            source_identity_service.bind_character(
-                character=character,
-                source_record=record,
-                match_method=CharacterExternalIdentity.MatchMethod.PROVIDER,
+            entity = self._resolve_entity(record)
+            if entity is not None:
+                return entity
+            payload = (
+                record.latest_revision.payload
+                if record.latest_revision_id
+                else {"embedded": True, "id": external_id}
             )
-            if character.entity_id is None:
-                knowledge_ingestion_service.project_character(
-                    character=character,
-                    provider_record=record,
-                    normalized_data=(
-                        record.latest_revision.payload
-                        if record.latest_revision_id
-                        else {"embedded": True, "id": external_id}
-                    ),
-                    mapper="bangumi.character",
-                    mapper_version="bangumi-character-placeholder-v1",
-                )
-        return character
+            return knowledge_ingestion_service.project_character_from_record(
+                provider_record=record,
+                normalized_data=payload,
+                mapped_data=self._map_character_data(payload),
+                mapper="bangumi.character",
+                mapper_version="bangumi-character-placeholder-v1",
+            )
+
+    @staticmethod
+    def _resolve_entity(record: SourceRecord) -> Entity | None:
+        representation = (
+            ProviderRepresentation.objects.filter(
+                provider_record=record,
+                is_active=True,
+            )
+            .select_related("entity")
+            .first()
+        )
+        return representation.entity if representation is not None else None
 
     def _map_character_data(self, data: dict) -> dict:
         return {

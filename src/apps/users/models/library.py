@@ -15,13 +15,6 @@ class UserSubject(models.Model):
     user = models.ForeignKey(
         "users.User", on_delete=models.CASCADE, related_name="subjects"
     )
-    subject = models.ForeignKey(
-        "index.Subject",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="users",
-    )
     entity = models.ForeignKey(
         "index.Entity",
         on_delete=models.PROTECT,
@@ -42,7 +35,6 @@ class UserSubject(models.Model):
     class Meta:
         db_table = "user_subject"
         constraints = [
-            models.UniqueConstraint(fields=["user", "subject"], name="uq_user_subject"),
             models.UniqueConstraint(
                 fields=["user", "entity"],
                 condition=Q(entity__isnull=False),
@@ -77,17 +69,11 @@ class UserSubject(models.Model):
             models.Index(
                 fields=["user", "watch_end_date"], name="idx_user_watch_end_date"
             ),
-            models.Index(
-                fields=["subject", "-simple_rating"], name="idx_subject_simple_rating"
-            ),
             models.Index(fields=["status"], name="idx_status"),
         ]
 
     def __str__(self) -> str:
-        return (
-            f"user={self.user_id} entity={self.entity_id or self.subject_id} "
-            f"status={self.status}"
-        )
+        return f"user={self.user_id} entity={self.entity_id} status={self.status}"
 
 
 class UserRelease(models.Model):
@@ -198,8 +184,12 @@ class UserEpisodeProgress(models.Model):
     user_subject = models.ForeignKey(
         "UserSubject", on_delete=models.CASCADE, related_name="episode_progress"
     )
-    episode = models.ForeignKey(
-        "index.Episode", on_delete=models.CASCADE, related_name="users_progress"
+    episode_entity = models.ForeignKey(
+        "index.Entity",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="user_episode_progress",
     )
     is_finished = models.BooleanField(default=False)
 
@@ -207,9 +197,13 @@ class UserEpisodeProgress(models.Model):
         db_table = "user_episode_progress"
         constraints = [
             models.UniqueConstraint(
-                fields=["user_subject", "episode"], name="uq_user_subject_episode"
+                fields=["user_subject", "episode_entity"],
+                name="uq_user_subject_episode",
             )
         ]
 
     def __str__(self) -> str:
-        return f"user_subject={self.user_subject_id} episode={self.episode_id}"
+        return (
+            f"user_subject={self.user_subject_id} "
+            f"episode_entity={self.episode_entity_id}"
+        )

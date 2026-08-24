@@ -1,7 +1,9 @@
 from django.db import transaction
 
 from apps.index.exceptions import InvalidEpisodeIds, SubjectNotFound
-from apps.index.models import Episode, Subject
+from apps.index.models import Entity
+from apps.index.selectors.current import current_entity_relations
+from apps.index.services import entity_resolution_service
 from apps.users.exceptions import UserSubjectNotFound
 from apps.users.models import UserEpisodeProgress, UserSubject
 from apps.users.selectors.library.progress_selector import EpisodeProgressSelector
@@ -11,8 +13,8 @@ class EpisodeProgressService:
     @staticmethod
     def _get_subject_or_raise(*, subject_id):
         try:
-            return Subject.objects.get(id=subject_id)
-        except Subject.DoesNotExist as exc:
+            return Entity.objects.select_related("work").get(pk=subject_id)
+        except Entity.DoesNotExist as exc:
             raise SubjectNotFound() from exc
 
     @staticmethod
@@ -21,7 +23,7 @@ class EpisodeProgressService:
             UserSubject.objects.select_for_update()
             .filter(
                 user=user,
-                subject=subject,
+                entity_id=subject.pk,
             )
             .first()
         )
@@ -35,11 +37,15 @@ class EpisodeProgressService:
             return []
 
         valid_episode_ids = set(
-            Episode.objects.filter(
-                id__in=episode_ids,
-                subject=subject,
-                type="EP",
-            ).values_list("id", flat=True)
+            current_entity_relations()
+            .filter(
+                from_entity_id__in=entity_resolution_service.cluster_ids(subject),
+                relation_type="has-episode",
+                to_entity__kind=Entity.Kind.EPISODE,
+                to_entity__lifecycle=Entity.Lifecycle.ACTIVE,
+                to_entity_id__in=episode_ids,
+            )
+            .values_list("to_entity_id", flat=True)
         )
 
         requested_ids = list(dict.fromkeys(episode_ids))
@@ -77,7 +83,7 @@ class EpisodeProgressService:
             [
                 UserEpisodeProgress(
                     user_subject=user_subject,
-                    episode_id=episode_id,
+                    episode_entity_id=episode_id,
                     is_finished=True,
                 )
                 for episode_id in valid_episode_ids
@@ -107,7 +113,7 @@ class EpisodeProgressService:
         if is_finished:
             UserEpisodeProgress.objects.update_or_create(
                 user_subject=user_subject,
-                episode_id=episode_id,
+                episode_entity_id=episode_id,
                 defaults={
                     "is_finished": True,
                 },
@@ -115,7 +121,7 @@ class EpisodeProgressService:
         else:
             UserEpisodeProgress.objects.filter(
                 user_subject=user_subject,
-                episode_id=episode_id,
+                episode_entity_id=episode_id,
             ).delete()
 
         return EpisodeProgressSelector.get_progress_summary(

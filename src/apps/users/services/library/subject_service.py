@@ -6,7 +6,7 @@ from django.db import transaction
 from apps.community.services.activity_service import ActivityService
 from apps.index.constants import PRIMARY_SUBJECT_TYPES
 from apps.index.exceptions import SubjectNotFound, SubjectTypeNotSupported
-from apps.index.models import Subject
+from apps.index.models import Entity
 from apps.users.exceptions import InvalidWatchDateRange
 from apps.users.models import UserSubject
 from apps.users.selectors.library.subject_selector import SubjectSelector
@@ -48,11 +48,15 @@ class UserSubjectService:
         is_public: bool = True,
     ) -> tuple[UserSubject, bool]:
         try:
-            subject = Subject.objects.get(id=subject_id)
-        except Subject.DoesNotExist as exc:
+            entity = Entity.objects.select_related("work").get(pk=subject_id)
+        except Entity.DoesNotExist as exc:
             raise SubjectNotFound() from exc
 
-        if subject.subject_type not in PRIMARY_SUBJECT_TYPES:
+        if (
+            entity.kind != Entity.Kind.WORK
+            or not hasattr(entity, "work")
+            or entity.work.work_type not in PRIMARY_SUBJECT_TYPES
+        ):
             raise SubjectTypeNotSupported()
 
         watch_start_date = UserSubjectService._normalize_watch_date(watch_start_date)
@@ -64,7 +68,7 @@ class UserSubjectService:
 
         user_subject, created = UserSubject.objects.update_or_create(
             user=user,
-            subject=subject,
+            entity=entity,
             defaults={
                 "status": status,
                 "simple_rating": simple_rating,

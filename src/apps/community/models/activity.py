@@ -27,13 +27,6 @@ class Activity(models.Model):
         blank=True,
         related_name="targeted_activities",
     )
-    subject = models.ForeignKey(
-        "index.Subject",
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name="activities",
-    )
     entity = models.ForeignKey(
         "index.Entity",
         on_delete=models.PROTECT,

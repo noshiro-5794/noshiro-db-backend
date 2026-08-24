@@ -1,6 +1,6 @@
-from apps.index.models import Subject
+from apps.index.models import Work
 
 PRIMARY_SUBJECT_TYPES = (
-    Subject.SubjectType.ANIME,
-    Subject.SubjectType.GALGAME,
+    Work.WorkType.ANIME,
+    Work.WorkType.GALGAME,
 )

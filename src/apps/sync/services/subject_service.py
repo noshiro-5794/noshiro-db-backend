@@ -4,9 +4,8 @@ from django.db import transaction
 
 from apps.index.models import (
     Entity,
+    ProviderRepresentation,
     SourceRecord,
-    Subject,
-    SubjectExternalIdentity,
     Work,
 )
 from apps.index.services import knowledge_ingestion_service
@@ -18,17 +17,14 @@ from apps.sync.providers.bangumi import (
 from apps.sync.providers.contracts import FetchedSourceRecord
 from apps.sync.services.data_mapping import clean_string
 from apps.sync.services.name_normalizer import name_normalizer
-from apps.sync.services.source_record_service import (
-    source_identity_service,
-    source_record_service,
-)
+from apps.sync.services.source_record_service import source_record_service
 
 
 class SubjectService:
     INFO_SOURCE = "bangumi_subject"
     GALGAME_META_TAG = "galgame"
 
-    def upsert_subject(self, bangumi_id: int) -> Subject:
+    def upsert_subject(self, bangumi_id: int) -> Entity:
         data = bangumi_client.fetch_subject(bangumi_id)
         if not isinstance(data, dict) or not data:
             raise BangumiAPIError("Bangumi subject response must be an object.")
@@ -44,36 +40,14 @@ class SubjectService:
         )
         mapped_data = self._map_subject_data(data)
         with transaction.atomic():
-            external_id = str(bangumi_id)
-            subject = source_identity_service.resolve_subject(
-                namespace_spec=BANGUMI_SUBJECT_NAMESPACE,
-                external_id=external_id,
-                legacy_source=self.INFO_SOURCE,
-            )
-            if subject is None:
-                subject = Subject.objects.create(
-                    info_source=self.INFO_SOURCE,
-                    id_source=external_id,
-                    **mapped_data,
-                )
-            else:
-                for field, value in mapped_data.items():
-                    setattr(subject, field, value)
-                subject.save(update_fields=[*mapped_data, "updated_at"])
-            source_identity_service.bind_subject(
-                subject=subject,
-                source_record=recorded.record,
-                match_method=SubjectExternalIdentity.MatchMethod.PROVIDER,
-            )
-            knowledge_ingestion_service.project_subject(
-                subject=subject,
+            return knowledge_ingestion_service.project_work_from_record(
                 provider_record=recorded.record,
                 normalized_data=data,
+                mapped_data=mapped_data,
                 mapper_version="bangumi-subject-v1",
             )
-        return subject
 
-    def provide_subject(self, bangumi_id: int | str) -> Subject:
+    def provide_subject(self, bangumi_id: int | str) -> Entity:
         external_id = str(bangumi_id)
         record = source_record_service.ensure_record(
             namespace_spec=BANGUMI_SUBJECT_NAMESPACE,
@@ -82,36 +56,32 @@ class SubjectService:
             canonical_url=f"https://bgm.tv/subject/{external_id}",
         )
         with transaction.atomic():
-            subject = source_identity_service.resolve_subject(
-                namespace_spec=BANGUMI_SUBJECT_NAMESPACE,
-                external_id=external_id,
-                legacy_source=self.INFO_SOURCE,
+            entity = self._resolve_entity(record)
+            if entity is not None and Work.objects.filter(pk=entity.pk).exists():
+                return entity
+            payload = (
+                record.latest_revision.payload
+                if record.latest_revision_id
+                else {"embedded": True, "id": external_id}
             )
-            if subject is None:
-                subject, _ = Subject.objects.get_or_create(
-                    info_source=self.INFO_SOURCE,
-                    id_source=external_id,
-                )
-            source_identity_service.bind_subject(
-                subject=subject,
-                source_record=record,
-                match_method=SubjectExternalIdentity.MatchMethod.PROVIDER,
+            return knowledge_ingestion_service.project_work_from_record(
+                provider_record=record,
+                normalized_data=payload,
+                mapped_data=self._map_subject_data(payload),
+                mapper_version="bangumi-subject-placeholder-v1",
             )
-            if not (
-                Entity.objects.filter(pk=subject.pk).exists()
-                and Work.objects.filter(pk=subject.pk).exists()
-            ):
-                knowledge_ingestion_service.project_subject(
-                    subject=subject,
-                    provider_record=record,
-                    normalized_data=(
-                        record.latest_revision.payload
-                        if record.latest_revision_id
-                        else {"embedded": True, "id": external_id}
-                    ),
-                    mapper_version="bangumi-subject-placeholder-v1",
-                )
-        return subject
+
+    @staticmethod
+    def _resolve_entity(record: SourceRecord) -> Entity | None:
+        representation = (
+            ProviderRepresentation.objects.filter(
+                provider_record=record,
+                is_active=True,
+            )
+            .select_related("entity")
+            .first()
+        )
+        return representation.entity if representation is not None else None
 
     def _map_subject_data(self, data: dict) -> dict:
         return {
