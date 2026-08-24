@@ -24,7 +24,7 @@ from apps.index.selectors.projections import entity_detail
 from apps.index.services import entity_resolution_service
 from integrations.ai import ai_gateway
 
-from .matching import AIMatchingService
+from .common import optional_non_negative_decimal, optional_non_negative_int
 
 
 class AIKnowledgeProposalService:
@@ -346,13 +346,9 @@ class AIKnowledgeProposalService:
     ) -> AIProposal:
         run.status = AIRun.Status.SUCCEEDED
         run.output = output
-        run.input_tokens = AIMatchingService._optional_non_negative_int(
-            usage.get("input_tokens")
-        )
-        run.output_tokens = AIMatchingService._optional_non_negative_int(
-            usage.get("output_tokens")
-        )
-        run.cost = AIMatchingService._optional_non_negative_decimal(usage.get("cost"))
+        run.input_tokens = optional_non_negative_int(usage.get("input_tokens"))
+        run.output_tokens = optional_non_negative_int(usage.get("output_tokens"))
+        run.cost = optional_non_negative_decimal(usage.get("cost"))
         run.latency_ms = max(0, latency_ms)
         run.finished_at = timezone.now()
         run.save(

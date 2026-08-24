@@ -1,34 +1,27 @@
-import hashlib
-import json
-import math
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from typing import Any
 
 from django.db import transaction
 from django.utils import timezone
 
-from apps.ai.exceptions import InvalidAIProposal
 from apps.ai.models import AIEvaluationRun, AIPolicy, AIProposal, AIRun
 from apps.index.models import MatchCandidate, MatchDecision
 from apps.index.services import entity_resolution_service
 from apps.users.models import UserSubject
 from integrations.ai import ai_gateway
 
+from .common import (
+    ENTITY_MATCHING_USE_CASE,
+    ai_input_hash,
+    optional_non_negative_decimal,
+    optional_non_negative_int,
+    validate_matching_output,
+)
+
 
 class AIMatchingService:
-    USE_CASE = "entity_matching"
+    USE_CASE = ENTITY_MATCHING_USE_CASE
     PROMPT_VERSION = "entity-match-v1"
-    DECISIONS = frozenset({"bind", "reject", "abstain"})
-
-    @staticmethod
-    def _input_hash(payload: dict[str, Any]) -> str:
-        value = json.dumps(
-            payload,
-            ensure_ascii=False,
-            separators=(",", ":"),
-            sort_keys=True,
-        ).encode()
-        return hashlib.sha256(value).hexdigest()
 
     def evaluate(self, *, candidate_id) -> AIProposal:
         candidate = MatchCandidate.objects.select_related(
@@ -61,7 +54,7 @@ class AIMatchingService:
             provider=ai_gateway.provider_name,
             model=ai_gateway.model_name,
             prompt_version=self.PROMPT_VERSION,
-            input_hash=self._input_hash(payload),
+            input_hash=ai_input_hash(payload),
             input_metadata={"candidate_id": str(candidate.id)},
             status=AIRun.Status.RUNNING,
             started_at=timezone.now(),
@@ -77,7 +70,7 @@ class AIMatchingService:
                 ),
                 payload=payload,
             )
-            output = self._validate_output(raw_output)
+            output = validate_matching_output(raw_output)
         except Exception as exc:
             self._mark_run_failed(run=run, error=exc)
             raise
@@ -91,37 +84,6 @@ class AIMatchingService:
             usage=usage,
             latency_ms=latency_ms,
         )
-
-    @classmethod
-    def _validate_output(cls, output: dict[str, Any]) -> dict[str, Any]:
-        decision = output.get("decision")
-        reason = output.get("reason")
-        raw_confidence = output.get("confidence")
-        if decision not in cls.DECISIONS:
-            raise InvalidAIProposal(
-                "AI proposal decision must be bind, reject, or abstain."
-            )
-        if not isinstance(reason, str) or not reason.strip():
-            raise InvalidAIProposal("AI proposal reason must be a non-empty string.")
-        if isinstance(raw_confidence, bool):
-            raise InvalidAIProposal(
-                "AI proposal confidence must be a number from 0 to 1."
-            )
-        try:
-            confidence = Decimal(str(raw_confidence))
-        except (InvalidOperation, TypeError, ValueError) as exc:
-            raise InvalidAIProposal(
-                "AI proposal confidence must be a number from 0 to 1."
-            ) from exc
-        if not math.isfinite(float(confidence)) or not 0 <= confidence <= 1:
-            raise InvalidAIProposal(
-                "AI proposal confidence must be a number from 0 to 1."
-            )
-        return {
-            "decision": decision,
-            "confidence": str(confidence),
-            "reason": reason.strip()[:2000],
-        }
 
     @staticmethod
     def _mark_run_failed(*, run: AIRun, error: Exception) -> None:
@@ -145,9 +107,9 @@ class AIMatchingService:
         policy = AIPolicy.objects.get(pk=policy_id)
         run.status = AIRun.Status.SUCCEEDED
         run.output = output
-        run.input_tokens = self._optional_non_negative_int(usage.get("input_tokens"))
-        run.output_tokens = self._optional_non_negative_int(usage.get("output_tokens"))
-        run.cost = self._optional_non_negative_decimal(usage.get("cost"))
+        run.input_tokens = optional_non_negative_int(usage.get("input_tokens"))
+        run.output_tokens = optional_non_negative_int(usage.get("output_tokens"))
+        run.cost = optional_non_negative_decimal(usage.get("cost"))
         run.latency_ms = max(0, latency_ms)
         run.finished_at = timezone.now()
         run.save(
@@ -170,26 +132,6 @@ class AIMatchingService:
         )
         self._apply_policy(proposal=proposal, candidate=candidate, policy=policy)
         return proposal
-
-    @staticmethod
-    def _optional_non_negative_int(value: Any) -> int | None:
-        if value is None or isinstance(value, bool):
-            return None
-        try:
-            parsed = int(value)
-        except (TypeError, ValueError):
-            return None
-        return parsed if parsed >= 0 else None
-
-    @staticmethod
-    def _optional_non_negative_decimal(value: Any) -> Decimal | None:
-        if value is None or isinstance(value, bool):
-            return None
-        try:
-            parsed = Decimal(str(value))
-        except (InvalidOperation, TypeError, ValueError):
-            return None
-        return parsed if parsed.is_finite() and parsed >= 0 else None
 
     @staticmethod
     def _policy_is_production_ready(

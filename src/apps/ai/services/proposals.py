@@ -6,8 +6,13 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.ai.models import AIProposal, AIRun
-from apps.ai.services.matching import AIMatchingService
 from apps.index.models import MatchCandidate
+
+from .common import (
+    ENTITY_MATCHING_USE_CASE,
+    ai_input_hash,
+    validate_matching_output,
+)
 
 
 class AIProposalService:
@@ -23,7 +28,7 @@ class AIProposalService:
         input_metadata: dict[str, Any] | None = None,
     ) -> AIProposal:
         candidate = MatchCandidate.objects.select_for_update().get(pk=candidate_id)
-        output = AIMatchingService._validate_output(
+        output = validate_matching_output(
             {
                 "decision": decision,
                 "confidence": str(confidence),
@@ -38,11 +43,11 @@ class AIProposalService:
             "reason": output["reason"],
         }
         run = AIRun.objects.create(
-            use_case=AIMatchingService.USE_CASE,
+            use_case=ENTITY_MATCHING_USE_CASE,
             provider="internal_mcp",
             model="mcp_client",
             prompt_version=prompt_version[:64],
-            input_hash=AIMatchingService._input_hash(payload),
+            input_hash=ai_input_hash(payload),
             input_metadata={
                 "candidate_id": str(candidate.id),
                 **(input_metadata or {}),
@@ -55,7 +60,7 @@ class AIProposalService:
         return AIProposal.objects.create(
             run=run,
             match_candidate=candidate,
-            proposal_type=AIMatchingService.USE_CASE,
+            proposal_type=ENTITY_MATCHING_USE_CASE,
             payload=output,
             confidence=Decimal(output["confidence"]),
             policy_reason=(
