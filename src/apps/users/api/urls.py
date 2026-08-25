@@ -35,6 +35,11 @@ from apps.users.api.views.profiles import (
     PublicUserLibraryView,
     PublicUserReviewListView,
 )
+from apps.users.api.views.public_collections import (
+    PublicCollectionDetailView,
+    PublicCollectionItemListView,
+    PublicCollectionListView,
+)
 from apps.users.api.views.reviews import (
     LibraryEntryReviewListCreateView,
     MyReviewDetailView,
@@ -134,6 +139,21 @@ user_urlpatterns = [
         "<int:user_id>/reviews/",
         PublicUserReviewListView.as_view(),
         name="public-user-reviews",
+    ),
+    path(
+        "<int:user_id>/collections/",
+        PublicCollectionListView.as_view(),
+        name="public-user-collections",
+    ),
+    path(
+        "<int:user_id>/collections/<int:collection_id>/",
+        PublicCollectionDetailView.as_view(),
+        name="public-user-collection",
+    ),
+    path(
+        "<int:user_id>/collections/<int:collection_id>/items/",
+        PublicCollectionItemListView.as_view(),
+        name="public-user-collection-items",
     ),
     path(
         "entities/<uuid:entity_id>/reviews/",
