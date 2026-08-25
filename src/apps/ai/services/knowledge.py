@@ -210,7 +210,8 @@ class AIKnowledgeProposalService:
         )
         started = timezone.now()
         try:
-            raw_output, usage = ai_gateway.complete_json(use_case=use_case,
+            raw_output, usage = ai_gateway.complete_json(
+                use_case=use_case,
                 system_prompt=system_prompt,
                 payload=payload,
             )

@@ -61,7 +61,8 @@ class AIMatchingService:
         )
         started = timezone.now()
         try:
-            raw_output, usage = ai_gateway.complete_json(use_case=self.USE_CASE,
+            raw_output, usage = ai_gateway.complete_json(
+                use_case=self.USE_CASE,
                 system_prompt=(
                     "Assess whether two knowledge-base entities represent the same "
                     "real work using only the supplied evidence. Never infer a private "
