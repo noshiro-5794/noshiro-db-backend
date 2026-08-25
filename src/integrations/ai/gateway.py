@@ -1,4 +1,5 @@
 import json
+from decimal import Decimal
 from typing import Any
 
 import httpx
@@ -7,6 +8,19 @@ from django.conf import settings
 from integrations.ai.exceptions import AIProviderError
 from shared.outbound import httpx_client_kwargs
 
+_MODEL_ROUTING: dict[str, str] = {
+    "entity_matching": "AI_PRIMARY_MODEL",
+    "entity_classification": "AI_FAST_MODEL",
+    "evidence_extraction": "AI_PRIMARY_MODEL",
+    "conflict_detection": "AI_PRIMARY_MODEL",
+    "info_completion": "AI_PRIMARY_MODEL",
+    "field_normalization": "AI_FAST_MODEL",
+    "knowledge_qa": "AI_PRIMARY_MODEL",
+    "user_agent": "AI_PRIMARY_MODEL",
+}
+
+_CLASSIFICATION_FALLBACK_THRESHOLD = Decimal("0.85")
+
 
 class OpenAICompatibleGateway:
     provider_name = "openai_compatible"
@@ -14,9 +28,9 @@ class OpenAICompatibleGateway:
     def __init__(self, client: httpx.Client | None = None) -> None:
         self._client = client
 
-    @property
-    def model_name(self) -> str:
-        return settings.AI_AGENT_MODEL
+    def resolve_model(self, use_case: str) -> str:
+        setting_key = _MODEL_ROUTING.get(use_case, "AI_PRIMARY_MODEL")
+        return getattr(settings, setting_key)
 
     @property
     def client(self) -> httpx.Client:
@@ -33,12 +47,34 @@ class OpenAICompatibleGateway:
         return self._client
 
     def complete_json(
-        self, *, system_prompt: str, payload: dict[str, Any]
-    ) -> tuple[dict[str, Any], dict[str, int | None]]:
+        self,
+        *,
+        system_prompt: str,
+        payload: dict[str, Any],
+        use_case: str = "entity_matching",
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
         if not settings.AI_AGENT_API_KEY:
             raise AIProviderError("AI_AGENT_API_KEY is not configured.")
+        model = self.resolve_model(use_case)
+        result, usage = self._call(model, system_prompt, payload)
+        if (
+            use_case == "entity_classification"
+            and model == settings.AI_FAST_MODEL
+            and self._confidence(result) < _CLASSIFICATION_FALLBACK_THRESHOLD
+        ):
+            result, usage = self._call(
+                settings.AI_PRIMARY_MODEL, system_prompt, payload
+            )
+        return result, usage
+
+    def _call(
+        self,
+        model: str,
+        system_prompt: str,
+        payload: dict[str, Any],
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
         request_payload = {
-            "model": self.model_name,
+            "model": model,
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {
@@ -66,6 +102,7 @@ class OpenAICompatibleGateway:
             raise AIProviderError("AI provider JSON output must be an object.")
         usage = data.get("usage") or {}
         return result, {
+            "model": model,
             "input_tokens": usage.get("prompt_tokens"),
             "output_tokens": usage.get("completion_tokens"),
         }

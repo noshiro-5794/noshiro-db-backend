@@ -201,7 +201,7 @@ class AIKnowledgeProposalService:
         run = AIRun.objects.create(
             use_case=use_case,
             provider=ai_gateway.provider_name,
-            model=ai_gateway.model_name,
+            model=ai_gateway.resolve_model(use_case),
             prompt_version=prompt_version,
             input_hash=hashlib.sha256(encoded).hexdigest(),
             input_metadata=input_metadata,
@@ -210,7 +210,7 @@ class AIKnowledgeProposalService:
         )
         started = timezone.now()
         try:
-            raw_output, usage = ai_gateway.complete_json(
+            raw_output, usage = ai_gateway.complete_json(use_case=use_case,
                 system_prompt=system_prompt,
                 payload=payload,
             )

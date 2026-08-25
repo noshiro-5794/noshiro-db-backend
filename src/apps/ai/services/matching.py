@@ -52,7 +52,7 @@ class AIMatchingService:
         run = AIRun.objects.create(
             use_case=self.USE_CASE,
             provider=ai_gateway.provider_name,
-            model=ai_gateway.model_name,
+            model=ai_gateway.resolve_model(self.USE_CASE),
             prompt_version=self.PROMPT_VERSION,
             input_hash=ai_input_hash(payload),
             input_metadata={"candidate_id": str(candidate.id)},
@@ -61,7 +61,7 @@ class AIMatchingService:
         )
         started = timezone.now()
         try:
-            raw_output, usage = ai_gateway.complete_json(
+            raw_output, usage = ai_gateway.complete_json(use_case=self.USE_CASE,
                 system_prompt=(
                     "Assess whether two knowledge-base entities represent the same "
                     "real work using only the supplied evidence. Never infer a private "

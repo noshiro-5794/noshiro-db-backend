@@ -388,9 +388,25 @@ AI_AGENT_API_BASE_URL = env(
 
 AI_AGENT_API_KEY = env("AI_AGENT_API_KEY", default=None)
 
-AI_AGENT_MODEL = env(
-    "AI_AGENT_MODEL",
-    default="Pro/zai-org/GLM-4.7",
+
+AI_PRIMARY_MODEL = env(
+    "AI_PRIMARY_MODEL",
+    default="zai-org/GLM-5.2",
+)
+
+AI_FAST_MODEL = env(
+    "AI_FAST_MODEL",
+    default="deepseek-ai/DeepSeek-V4-Flash-0731",
+)
+
+AI_REASONING_MODEL = env(
+    "AI_REASONING_MODEL",
+    default="deepseek-ai/DeepSeek-V4-Pro",
+)
+
+AI_EMBEDDING_MODEL = env(
+    "AI_EMBEDDING_MODEL",
+    default="Qwen/Qwen3-Embedding-8B",
 )
 
 AI_AGENT_TIMEOUT = env.float("AI_AGENT_TIMEOUT", default=30)
