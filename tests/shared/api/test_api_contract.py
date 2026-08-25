@@ -25,6 +25,7 @@ def test_application_error_is_framework_independent() -> None:
     assert not isinstance(error, APIException)
 
 
+@override_settings(PROBLEM_BASE_URI="https://app.noshiro.moe/problems/")
 def test_application_error_uses_its_public_code_and_message() -> None:
     response = custom_exception_handler(ExampleApplicationError(), {})
 
@@ -39,6 +40,7 @@ def test_application_error_uses_its_public_code_and_message() -> None:
     assert response["Content-Type"] == "application/problem+json"
 
 
+@override_settings(PROBLEM_BASE_URI="https://app.noshiro.moe/problems/")
 def test_domain_error_controls_problem_status_and_type() -> None:
     response = custom_exception_handler(SubjectNotFound(), {})
 
@@ -80,6 +82,7 @@ def test_validation_error_preserves_field_details() -> None:
 
 
 @override_settings(DEBUG=False)
+@override_settings(PROBLEM_BASE_URI="https://app.noshiro.moe/problems/")
 def test_unhandled_exception_uses_the_safe_public_response() -> None:
     response = custom_exception_handler(RuntimeError("private detail"), {})
 

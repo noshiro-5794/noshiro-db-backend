@@ -28,12 +28,14 @@ test_environment = {
     "DATABASE_URL": test_database_url,
     "DJANGO_ALLOWED_HOSTS": "testserver,localhost",
     "DJANGO_SECRET_KEY": "test-only-secret-key-with-at-least-32-bytes",
+    "FRONTEND_SITE_URL": "https://app.noshiro.moe",
     "MINIO_ACCESS_KEY": "test",
     "MINIO_BUCKET": "test",
     "MINIO_ENDPOINT": "127.0.0.1:9000",
     "MINIO_PUBLIC_URL": "http://127.0.0.1:9000",
     "MINIO_SECRET_KEY": "test",
     "OUTBOUND_PROXY_URL": "",
+    "PROBLEM_BASE_URI": "https://app.noshiro.moe/problems/",
 }
 
 os.environ.update(test_environment)

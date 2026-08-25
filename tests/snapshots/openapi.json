@@ -4039,6 +4039,13 @@
                     },
                     {
                         "in": "query",
+                        "name": "include_work",
+                        "schema": {
+                            "type": "boolean"
+                        }
+                    },
+                    {
+                        "in": "query",
                         "name": "timezone",
                         "schema": {
                             "type": "string"
@@ -4140,6 +4147,13 @@
                     },
                     {
                         "in": "query",
+                        "name": "nsfw",
+                        "schema": {
+                            "type": "boolean"
+                        }
+                    },
+                    {
+                        "in": "query",
                         "name": "page",
                         "schema": {
                             "type": "integer",
@@ -4185,6 +4199,25 @@
                             "type": "string"
                         },
                         "required": true
+                    },
+                    {
+                        "in": "query",
+                        "name": "subject_type",
+                        "schema": {
+                            "enum": [
+                                "anime",
+                                "galgame",
+                                "manga",
+                                "novel",
+                                "game",
+                                "music",
+                                "other",
+                                "unclassified"
+                            ],
+                            "type": "string",
+                            "minLength": 1
+                        },
+                        "description": "* `anime` - Anime\n* `galgame` - Galgame\n* `manga` - Manga\n* `novel` - Novel\n* `game` - Game\n* `music` - Music\n* `other` - Other\n* `unclassified` - Unclassified"
                     }
                 ],
                 "tags": [
@@ -4252,6 +4285,13 @@
                     },
                     {
                         "in": "query",
+                        "name": "nsfw",
+                        "schema": {
+                            "type": "boolean"
+                        }
+                    },
+                    {
+                        "in": "query",
                         "name": "page",
                         "schema": {
                             "type": "integer",
@@ -4289,6 +4329,25 @@
                             "minLength": 1
                         },
                         "description": "* `index` - index\n* `all` - all"
+                    },
+                    {
+                        "in": "query",
+                        "name": "subject_type",
+                        "schema": {
+                            "enum": [
+                                "anime",
+                                "galgame",
+                                "manga",
+                                "novel",
+                                "game",
+                                "music",
+                                "other",
+                                "unclassified"
+                            ],
+                            "type": "string",
+                            "minLength": 1
+                        },
+                        "description": "* `anime` - Anime\n* `galgame` - Galgame\n* `manga` - Manga\n* `novel` - Novel\n* `game` - Game\n* `music` - Music\n* `other` - Other\n* `unclassified` - Unclassified"
                     }
                 ],
                 "tags": [
@@ -4777,12 +4836,13 @@
                         "name": "provider",
                         "schema": {
                             "enum": [
-                                "vndb"
+                                "vndb",
+                                "anilist"
                             ],
                             "type": "string",
                             "minLength": 1
                         },
-                        "description": "* `vndb` - vndb"
+                        "description": "* `vndb` - VNDB\n* `anilist` - AniList"
                     },
                     {
                         "in": "query",
@@ -5049,6 +5109,224 @@
                             "application/json": {
                                 "schema": {
                                     "$ref": "#/components/schemas/PublicUser"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "404": {
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v1/users/{user_id}/collections/": {
+            "get": {
+                "operationId": "get_api_v1_users_by_user_id_collections",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "keyword",
+                        "schema": {
+                            "type": "string",
+                            "maxLength": 200
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "ordering",
+                        "schema": {
+                            "enum": [
+                                "id",
+                                "-id",
+                                "name",
+                                "-name",
+                                "simple_rating",
+                                "-simple_rating",
+                                "item_count",
+                                "-item_count"
+                            ],
+                            "type": "string",
+                            "default": "id",
+                            "minLength": 1
+                        },
+                        "description": "* `id` - id\n* `-id` - -id\n* `name` - name\n* `-name` - -name\n* `simple_rating` - simple_rating\n* `-simple_rating` - -simple_rating\n* `item_count` - item_count\n* `-item_count` - -item_count"
+                    },
+                    {
+                        "in": "query",
+                        "name": "page",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "default": 1
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "page_size",
+                        "schema": {
+                            "type": "integer",
+                            "maximum": 64,
+                            "minimum": 1
+                        }
+                    },
+                    {
+                        "in": "path",
+                        "name": "user_id",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "v1"
+                ],
+                "security": [
+                    {
+                        "jwtAuth": []
+                    },
+                    {}
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PaginatedPublicCollection"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "404": {
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v1/users/{user_id}/collections/{collection_id}/": {
+            "get": {
+                "operationId": "get_api_v1_users_by_user_id_collections_by_collection_id",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "collection_id",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "user_id",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "v1"
+                ],
+                "security": [
+                    {
+                        "jwtAuth": []
+                    },
+                    {}
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UserCollection"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "404": {
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProblemDetails"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v1/users/{user_id}/collections/{collection_id}/items/": {
+            "get": {
+                "operationId": "get_api_v1_users_by_user_id_collections_by_collection_id_items",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "collection_id",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "query",
+                        "name": "page",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "default": 1
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "page_size",
+                        "schema": {
+                            "type": "integer",
+                            "maximum": 64,
+                            "minimum": 1
+                        }
+                    },
+                    {
+                        "in": "path",
+                        "name": "user_id",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "v1"
+                ],
+                "security": [
+                    {
+                        "jwtAuth": []
+                    },
+                    {}
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PaginatedPublicCollectionItem"
                                 }
                             }
                         },
@@ -9270,6 +9548,18 @@
                     "raw_value": {
                         "type": "string"
                     },
+                    "collection_doing": {
+                        "type": "integer",
+                        "minimum": 0
+                    },
+                    "work": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/EntitySummary"
+                            }
+                        ],
+                        "nullable": true
+                    },
                     "provenance": {
                         "allOf": [
                             {
@@ -9280,6 +9570,7 @@
                     }
                 },
                 "required": [
+                    "collection_doing",
                     "episode_id",
                     "id",
                     "precision",
@@ -11006,7 +11297,7 @@
                         "format": "uuid"
                     },
                     "provider": {
-                        "$ref": "#/components/schemas/ImportJobProviderEnum"
+                        "$ref": "#/components/schemas/ProviderEnum"
                     },
                     "external_id": {
                         "type": "string",
@@ -11062,11 +11353,11 @@
                 "type": "object",
                 "properties": {
                     "provider": {
-                        "$ref": "#/components/schemas/ImportJobCreateProviderEnum"
+                        "$ref": "#/components/schemas/ProviderEnum"
                     },
                     "external_id": {
                         "type": "string",
-                        "pattern": "^v[1-9][0-9]*$"
+                        "maxLength": 255
                     },
                     "include_related": {
                         "type": "boolean",
@@ -11077,13 +11368,6 @@
                     "external_id",
                     "provider"
                 ]
-            },
-            "ImportJobCreateProviderEnum": {
-                "enum": [
-                    "vndb"
-                ],
-                "type": "string",
-                "description": "* `vndb` - vndb"
             },
             "ImportJobProgress": {
                 "type": "object",
@@ -11120,14 +11404,6 @@
                     "synced",
                     "total"
                 ]
-            },
-            "ImportJobProviderEnum": {
-                "enum": [
-                    "bangumi",
-                    "vndb"
-                ],
-                "type": "string",
-                "description": "* `bangumi` - bangumi\n* `vndb` - vndb"
             },
             "IndexCollection": {
                 "type": "object",
@@ -11747,6 +12023,68 @@
                     "results"
                 ]
             },
+            "PaginatedPublicCollection": {
+                "type": "object",
+                "properties": {
+                    "count": {
+                        "type": "integer",
+                        "minimum": 0
+                    },
+                    "next": {
+                        "type": "string",
+                        "format": "uri",
+                        "nullable": true
+                    },
+                    "previous": {
+                        "type": "string",
+                        "format": "uri",
+                        "nullable": true
+                    },
+                    "results": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/UserCollection"
+                        }
+                    }
+                },
+                "required": [
+                    "count",
+                    "next",
+                    "previous",
+                    "results"
+                ]
+            },
+            "PaginatedPublicCollectionItem": {
+                "type": "object",
+                "properties": {
+                    "count": {
+                        "type": "integer",
+                        "minimum": 0
+                    },
+                    "next": {
+                        "type": "string",
+                        "format": "uri",
+                        "nullable": true
+                    },
+                    "previous": {
+                        "type": "string",
+                        "format": "uri",
+                        "nullable": true
+                    },
+                    "results": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/CollectionItem"
+                        }
+                    }
+                },
+                "required": [
+                    "count",
+                    "next",
+                    "previous",
+                    "results"
+                ]
+            },
             "PaginatedReview": {
                 "type": "object",
                 "properties": {
@@ -12121,11 +12459,10 @@
             "PostTypeEnum": {
                 "enum": [
                     "status",
-                    "entity",
-                    "subject"
+                    "entity"
                 ],
                 "type": "string",
-                "description": "* `status` - Status\n* `entity` - Entity\n* `subject` - Legacy subject"
+                "description": "* `status` - Status\n* `entity` - Entity"
             },
             "PostViewerState": {
                 "type": "object",
@@ -12253,6 +12590,14 @@
                     "reviews",
                     "subjects"
                 ]
+            },
+            "ProviderEnum": {
+                "enum": [
+                    "vndb",
+                    "anilist"
+                ],
+                "type": "string",
+                "description": "* `vndb` - VNDB\n* `anilist` - AniList"
             },
             "PublicUser": {
                 "type": "object",
