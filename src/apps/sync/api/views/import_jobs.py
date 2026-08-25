@@ -12,8 +12,11 @@ from apps.sync.api.serializers.import_jobs import (
 )
 from apps.sync.exceptions import SyncTaskDispatchFailed
 from apps.sync.models import SyncJob
+from apps.sync.services.import_providers import (
+    import_provider_for,
+    import_provider_for_job_type,
+)
 from apps.sync.services.sync_job_service import sync_job_service
-from apps.sync.tasks.vndb import import_vndb_work_task
 from shared.api.contracts import (
     CursorPaginationQuerySerializer,
     api_responses,
@@ -23,7 +26,10 @@ from shared.api.pagination import TimelineCursorPagination
 
 
 def import_job_data(job: SyncJob) -> dict:
-    provider = "vndb" if job.job_type == SyncJob.JobType.VNDB_IMPORT else "bangumi"
+    try:
+        provider = import_provider_for_job_type(job.job_type).slug
+    except KeyError:
+        provider = "unknown"
     return {
         "id": str(job.id),
         "provider": provider,
@@ -70,7 +76,14 @@ class ImportJobListCreateView(APIView):
         serializer = ImportJobQuerySerializer(data=request.query_params)
         serializer.is_valid(raise_exception=True)
         query = serializer.validated_data
-        queryset = SyncJob.objects.filter(job_type=SyncJob.JobType.VNDB_IMPORT)
+        provider = query.get("provider")
+        queryset = SyncJob.objects.filter(
+            job_type=(
+                import_provider_for(provider).job_type
+                if provider is not None
+                else SyncJob.JobType.VNDB_IMPORT
+            )
+        )
         if job_status := query.get("status"):
             queryset = queryset.filter(status=job_status)
 
@@ -82,17 +95,18 @@ class ImportJobListCreateView(APIView):
         serializer = ImportJobCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         values = serializer.validated_data
+        provider = import_provider_for(values["provider"])
         job = sync_job_service.create_job(
-            job_type=SyncJob.JobType.VNDB_IMPORT,
+            job_type=provider.job_type,
             parameters={
-                "provider": values["provider"],
+                "provider": provider.slug,
                 "external_id": values["external_id"],
                 "include_related": values["include_related"],
             },
         )
         try:
-            task = import_vndb_work_task.delay(
-                values["external_id"],
+            task = provider.dispatch(
+                external_id=values["external_id"],
                 include_related=values["include_related"],
                 job_id=str(job.id),
             )
@@ -115,6 +129,8 @@ class ImportJobDetailView(APIView):
 
     def get(self, request, job_id):
         job = sync_job_service.get_job(job_id=job_id)
-        if job.job_type != SyncJob.JobType.VNDB_IMPORT:
-            raise NotFound("Import job not found.")
+        try:
+            import_provider_for_job_type(job.job_type)
+        except KeyError as exc:
+            raise NotFound("Import job not found.") from exc
         return Response(import_job_data(job))

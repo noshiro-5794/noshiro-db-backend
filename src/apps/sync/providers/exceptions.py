@@ -16,4 +16,13 @@ class VNDBAPIError(ProviderAPIError):
     pass
 
 
-__all__ = ["BangumiAPIError", "ProviderAPIError", "VNDBAPIError"]
+class AniListAPIError(ProviderAPIError):
+    pass
+
+
+__all__ = [
+    "AniListAPIError",
+    "BangumiAPIError",
+    "ProviderAPIError",
+    "VNDBAPIError",
+]

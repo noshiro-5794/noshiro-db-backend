@@ -56,6 +56,7 @@ class SyncJob(models.Model):
         SUBJECT_BANGUMI = "subject_bangumi", "Subject by Bangumi"
         SUBJECT_RESYNC = "subject_resync", "Subject resync"
         VNDB_IMPORT = "vndb_import", "VNDB import"
+        ANILIST_IMPORT = "anilist_import", "AniList import"
         CALENDAR = "calendar", "Calendar"
         INCREMENTAL = "incremental", "Incremental"
 

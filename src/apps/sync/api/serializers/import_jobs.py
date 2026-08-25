@@ -1,17 +1,33 @@
 from rest_framework import serializers
 
 from apps.sync.models import SyncJob
+from apps.sync.services.import_providers import (
+    import_provider_choices,
+    import_provider_for,
+)
 
 
 class ImportJobCreateSerializer(serializers.Serializer):
-    provider = serializers.ChoiceField(choices=("vndb",))
-    external_id = serializers.RegexField(r"^v[1-9][0-9]*$")
+    provider = serializers.ChoiceField(choices=import_provider_choices())
+    external_id = serializers.CharField(max_length=255)
     include_related = serializers.BooleanField(default=True, required=False)
+
+    def validate(self, attrs):
+        provider = import_provider_for(attrs["provider"])
+        if not provider.external_id_pattern.fullmatch(attrs["external_id"]):
+            raise serializers.ValidationError(
+                {"external_id": f"Invalid {provider.slug} external id."}
+            )
+        if "include_related" not in attrs:
+            attrs["include_related"] = provider.default_include_related
+        return attrs
 
 
 class ImportJobQuerySerializer(serializers.Serializer):
     status = serializers.ChoiceField(choices=SyncJob.Status.choices, required=False)
-    provider = serializers.ChoiceField(choices=("vndb",), required=False)
+    provider = serializers.ChoiceField(
+        choices=import_provider_choices(), required=False
+    )
 
 
 class ImportJobProgressSerializer(serializers.Serializer):
@@ -25,7 +41,7 @@ class ImportJobProgressSerializer(serializers.Serializer):
 
 class ImportJobSerializer(serializers.Serializer):
     id = serializers.UUIDField()
-    provider = serializers.ChoiceField(choices=("bangumi", "vndb"))
+    provider = serializers.ChoiceField(choices=import_provider_choices())
     external_id = serializers.CharField(allow_null=True)
     status = serializers.ChoiceField(choices=SyncJob.Status.choices)
     parameters = serializers.JSONField()

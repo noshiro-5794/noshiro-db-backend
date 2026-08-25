@@ -367,6 +367,20 @@ VNDB_USER_AGENT = env(
 )
 VNDB_TIMEOUT = env.float("VNDB_TIMEOUT", default=30)
 
+ANILIST_API_BASE_URL = env(
+    "ANILIST_API_BASE_URL",
+    default="https://graphql.anilist.co",
+)
+ANILIST_USER_AGENT = env(
+    "ANILIST_USER_AGENT",
+    default="Noshiro_5794/noshiro_db (https://github.com/noshiro-5794)",
+)
+ANILIST_TIMEOUT = env.float("ANILIST_TIMEOUT", default=30)
+ANILIST_RATE_LIMIT_INTERVAL = env.float(
+    "ANILIST_RATE_LIMIT_INTERVAL",
+    default=0.75,
+)
+
 AI_AGENT_API_BASE_URL = env(
     "AI_AGENT_API_BASE_URL",
     default="https://api.siliconflow.cn/v1/chat/completions",
