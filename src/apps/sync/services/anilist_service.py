@@ -302,7 +302,7 @@ class AniListImportService:
         for slug, value in candidates.items():
             if value is None or value == "":
                 continue
-            value_type = "string"
+            value_type = "date" if slug in {"release-date", "end-date"} else "string"
             if isinstance(value, bool):
                 value_type = "boolean"
             elif isinstance(value, (int, Decimal)):
@@ -679,8 +679,8 @@ class AniListImportService:
                     observation=calendar_observation,
                     slug="episode-number",
                     name="Episode Number",
-                    value=episode_number,
-                    value_type="number",
+                    value=str(episode_number),
+                    value_type="string",
                     json_pointer=f"/schedule/{index}/episode",
                 )
         AiringEvent.objects.bulk_create(events, ignore_conflicts=True)
