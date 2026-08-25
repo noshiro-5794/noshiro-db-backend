@@ -234,3 +234,81 @@ def test_public_streamable_http_authentication_and_safe_projection() -> None:
             ]
 
     asyncio.run(exercise_transport())
+
+
+def test_internal_search_entities_returns_safe_projection() -> None:
+    from apps.index.models import Entity, EntityName
+
+    public = Entity.objects.create(kind=Entity.Kind.WORK)
+    restricted = Entity.objects.create(
+        kind=Entity.Kind.WORK,
+        visibility=Entity.Visibility.RESTRICTED,
+    )
+    EntityName.objects.create(
+        entity=public, text="Searchable", kind=EntityName.Kind.ORIGINAL,
+    )
+    EntityName.objects.create(
+        entity=restricted, text="Hidden", kind=EntityName.Kind.ORIGINAL,
+    )
+    server = create_internal_mcp_server()
+
+    _content, result = asyncio.run(
+        server.call_tool("search_entities", {"query": "Searchable", "limit": 50})
+    )
+    assert [item["id"] for item in result["results"]] == [str(public.id)]
+
+
+def test_internal_get_match_candidate_returns_evidence() -> None:
+    from apps.index.models import Entity, MatchCandidate
+
+    left = Entity.objects.create(kind=Entity.Kind.WORK)
+    right = Entity.objects.create(kind=Entity.Kind.WORK)
+    candidate = MatchCandidate.objects.create(
+        left_entity=left,
+        right_entity=right,
+        score="0.9990",
+        runner_up_margin="0.1000",
+        policy_version="match-v1",
+    )
+    server = create_internal_mcp_server()
+
+    _content, result = asyncio.run(
+        server.call_tool("get_match_candidate", {"candidate_id": str(candidate.id)})
+    )
+    assert result["id"] == str(candidate.id)
+
+
+def test_get_public_entity_raises_for_nonexistent_id() -> None:
+    import uuid
+    with pytest.raises(ValueError, match="Public entity not found"):
+        get_public_entity(entity_id=uuid.uuid4())
+
+
+def test_get_match_candidate_raises_for_nonexistent_id() -> None:
+    import uuid
+    from integrations.mcp.queries import get_match_candidate
+    with pytest.raises(ValueError, match="Match candidate not found"):
+        get_match_candidate(candidate_id=uuid.uuid4())
+
+
+def test_get_public_relations_skips_non_public_and_duplicates() -> None:
+    from apps.index.models import Entity, EntityName, EntityRelation
+    from integrations.mcp.queries import get_public_relations
+
+    public = Entity.objects.create(kind=Entity.Kind.WORK)
+    restricted = Entity.objects.create(
+        kind=Entity.Kind.WORK,
+        visibility=Entity.Visibility.RESTRICTED,
+    )
+    EntityName.objects.create(entity=public, text="Public", kind=EntityName.Kind.ORIGINAL)
+    EntityName.objects.create(entity=restricted, text="Hidden", kind=EntityName.Kind.ORIGINAL)
+
+    EntityRelation.objects.create(
+        from_entity=public,
+        to_entity=restricted,
+        relation_type="related",
+    )
+    result = get_public_relations(entity_id=public.id)
+    assert result["results"] == []
+
+

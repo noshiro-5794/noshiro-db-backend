@@ -61,6 +61,15 @@ omit = [
     "src/manage.py",
     "src/config/asgi.py",
     "src/config/wsgi.py",
+    "src/config/celery.py",
+    "src/config/mcp_internal.py",
+    "src/config/mcp_public.py",
+    "src/config/settings/local.py",
+    "src/config/settings/production.py",
+    "src/config/settings/test.py",
+    "src/config/settings/environment.py",
+    "src/integrations/mcp/__init__.py",
+    "src/integrations/mcp/django_setup.py",
     "*/migrations/*",
 ]
 

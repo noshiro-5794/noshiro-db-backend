@@ -67,6 +67,16 @@ class OpenAICompatibleGateway:
             )
         return result, usage
 
+    @staticmethod
+    def _confidence(result: dict[str, Any]) -> Decimal:
+        try:
+            raw = result.get("confidence")
+            if raw is None or isinstance(raw, bool):
+                return Decimal("0")
+            return Decimal(str(raw))
+        except Exception:
+            return Decimal("0")
+
     def _call(
         self,
         model: str,
