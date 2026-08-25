@@ -1,3 +1,4 @@
+import json
 from unittest.mock import patch
 
 from django.test import RequestFactory
@@ -10,7 +11,6 @@ class TestLiveness:
         request = RequestFactory().get("/health/live/")
         response = liveness(request)
         assert response.status_code == 200
-        import json
         data = json.loads(response.content)
         assert data["status"] == "ok"
 
@@ -18,7 +18,10 @@ class TestLiveness:
 class TestReadiness:
     def test_returns_ok_when_dependencies_healthy(self) -> None:
         request = RequestFactory().get("/health/ready/")
-        with patch("config.health.connection") as mock_conn, patch("config.health.cache") as mock_cache:
+        with (
+            patch("config.health.connection"),
+            patch("config.health.cache") as mock_cache,
+        ):
             mock_cache.get.return_value = "ok"
             response = readiness(request)
             assert response.status_code == 200

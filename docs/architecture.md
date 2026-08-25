@@ -81,10 +81,25 @@ remain reversible and evidence is retained.
 ## AI And MCP
 
 AI produces structured proposals and cannot write canonical tables directly.
-`apps.ai` owns policy and audit while `integrations.ai` isolates vendor clients.
-Provider requests and AI inference run outside canonical database transactions. The
-internal MCP server exposes reads and audited proposal submission; the public server
-exposes only authenticated, rate-limited safe projections.
+`apps.ai` owns the durable harness, versioned Skills, typed Tools, policy, evidence,
+and audit; `integrations.ai` isolates vendor clients. A run is persisted as
+`AgentRun -> AgentStep -> AIRun/ToolInvocation -> SourceArtifact/AIClaim`.
+The database is the execution source of truth; checkpoints are immutable snapshots,
+and retries use explicit state transitions and idempotency scopes. Apply, approval,
+and validation steps fail closed until a concrete handler is registered.
+
+Provider-wide synchronization is linked to one `AgentRun` through `SyncCampaign`.
+Fetch, pagination, mapping, and revision writes remain deterministic and resumable;
+AI is invoked only at explicit normalization/enrichment boundaries with an
+`Observation` or `SourceArtifact` attached. AI output is a claim/proposal and needs
+policy review before canonical projection. `SyncWorkItem` leases make duplicate
+Celery delivery and worker interruption recoverable; a campaign is not considered
+complete while discovery pages or queued work items remain.
+
+The internal MCP server exposes reads and audited proposal submission; the public
+server exposes only authenticated, rate-limited safe projections. MCP tools and
+in-process tools share the same namespaced, Pydantic-validated registry and explicit
+permission scopes.
 
 External HTTP clients use `OUTBOUND_PROXY_URL` when configured. Set it on servers
 that cannot reach Bangumi, VNDB, image hosts, Resend, hCaptcha, or the AI provider

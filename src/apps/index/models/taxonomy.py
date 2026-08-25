@@ -4,6 +4,12 @@ from .base import TimestampedModel
 
 
 class TermAlias(TimestampedModel):
+    class Origin(models.TextChoices):
+        LEGACY_UNKNOWN = "legacy_unknown", "Legacy provenance unknown"
+        PROVIDER = "provider", "Provider mapping"
+        AI_PROPOSAL = "ai_proposal", "AI proposal"
+        MANUAL = "manual", "Manual"
+
     vocabulary = models.SlugField(max_length=64)
     provider_namespace = models.ForeignKey(
         "ProviderNamespace",
@@ -12,6 +18,13 @@ class TermAlias(TimestampedModel):
         blank=True,
         related_name="term_aliases",
     )
+    term = models.ForeignKey(
+        "Term",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="aliases",
+    )
     source_text = models.CharField(max_length=256)
     normalized_key = models.CharField(max_length=256, db_index=True)
     preferred_term = models.CharField(max_length=256)
@@ -19,6 +32,11 @@ class TermAlias(TimestampedModel):
     script = models.CharField(max_length=4, blank=True)
     confidence = models.DecimalField(max_digits=5, decimal_places=4, default=1)
     is_reviewed = models.BooleanField(default=False)
+    origin = models.CharField(
+        max_length=32,
+        choices=Origin.choices,
+        default=Origin.LEGACY_UNKNOWN,
+    )
 
     class Meta:
         db_table = "index_term_alias"
@@ -31,6 +49,7 @@ class TermAlias(TimestampedModel):
                     "provider_namespace",
                 ],
                 name="uq_term_alias_key",
+                nulls_distinct=False,
             )
         ]
         indexes = [

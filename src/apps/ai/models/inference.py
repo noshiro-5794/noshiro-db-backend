@@ -5,6 +5,8 @@ from django.db import models
 
 
 class AIRun(models.Model):
+    """One model-provider invocation within a harness execution."""
+
     class Status(models.TextChoices):
         QUEUED = "queued", "Queued"
         RUNNING = "running", "Running"
@@ -13,6 +15,13 @@ class AIRun(models.Model):
         ABSTAINED = "abstained", "Abstained"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    agent_step = models.ForeignKey(
+        "AgentStep",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="model_invocations",
+    )
     use_case = models.CharField(max_length=64)
     provider = models.CharField(max_length=64)
     model = models.CharField(max_length=256)

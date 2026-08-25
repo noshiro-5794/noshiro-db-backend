@@ -4,6 +4,7 @@ import pytest
 from django.test import override_settings
 
 from apps.index.models import Provider
+from apps.sync.providers.anilist import AniListClient
 from apps.sync.providers.bangumi import (
     BANGUMI_SOURCE,
     BangumiAPIError,
@@ -133,3 +134,46 @@ def test_forbidden_storage_provider_is_not_requested(
         fetch(client_factory(http_client))
 
     getattr(http_client, request_method).assert_not_called()
+
+
+def test_vndb_catalog_discovery_is_page_based_and_id_only() -> None:
+    http_client = Mock()
+    response = http_client.post.return_value
+    response.json.return_value = {
+        "results": [{"id": "v1"}, {"id": "v2"}],
+        "more": True,
+        "count": 42,
+    }
+    with patch("apps.sync.providers.vndb.Provider.objects.filter") as provider_filter:
+        provider_filter.return_value.first.return_value = None
+        page = VNDBClient(http_client).discover_vn_page(cursor="3", page_size=25)
+
+    assert page.external_ids == ("v1", "v2")
+    assert page.next_cursor == "4"
+    assert page.total_count == 42
+    request = http_client.post.call_args.kwargs["json"]
+    assert request["fields"] == "id"
+    assert request["page"] == 3
+    assert request["results"] == 25
+
+
+def test_anilist_catalog_discovery_uses_page_info() -> None:
+    http_client = Mock()
+    response = http_client.post.return_value
+    response.json.return_value = {
+        "data": {
+            "Page": {
+                "pageInfo": {"hasNextPage": False, "total": 2},
+                "media": [{"id": 10}, {"id": 11}],
+            }
+        }
+    }
+    with patch(
+        "apps.sync.providers.anilist.Provider.objects.filter"
+    ) as provider_filter:
+        provider_filter.return_value.first.return_value = None
+        page = AniListClient(http_client).discover_anime_page(cursor="2", page_size=25)
+
+    assert page.external_ids == ("10", "11")
+    assert page.next_cursor is None
+    assert page.total_count == 2

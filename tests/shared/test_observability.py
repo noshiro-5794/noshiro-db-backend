@@ -1,4 +1,7 @@
+import logging
+
 from shared.observability import clear_context, set_task_context
+from shared.observability.logging import JsonFormatter, _is_sensitive, _json_value
 from shared.observability.metrics import record_task_event
 
 
@@ -22,10 +25,6 @@ class TestMetrics:
             duration_ms=100.0,
         )
 
-import logging
-
-from shared.observability.logging import JsonFormatter, _is_sensitive, _json_value
-
 
 class TestLogging:
     def test_is_sensitive_detects_password(self) -> None:
@@ -45,8 +44,13 @@ class TestLogging:
     def test_formatter_includes_exception(self) -> None:
         formatter = JsonFormatter()
         record = logging.LogRecord(
-            name="test", level=logging.ERROR, pathname="", lineno=0,
-            msg="boom", args=(), exc_info=None,
+            name="test",
+            level=logging.ERROR,
+            pathname="",
+            lineno=0,
+            msg="boom",
+            args=(),
+            exc_info=None,
         )
         try:
             raise ValueError("test error")

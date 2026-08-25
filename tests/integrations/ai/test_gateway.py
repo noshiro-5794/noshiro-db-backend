@@ -7,8 +7,8 @@ from django.test import override_settings
 
 from integrations.ai import AIProviderError, ai_gateway
 from integrations.ai.gateway import (
-    OpenAICompatibleGateway,
     _MODEL_ROUTING,
+    OpenAICompatibleGateway,
 )
 
 
@@ -55,12 +55,14 @@ class TestConfidence:
 
 class TestCompleteJson:
     def test_raises_without_api_key(self) -> None:
-        with override_settings(AI_AGENT_API_KEY=None):
-            with pytest.raises(AIProviderError, match="not configured"):
-                ai_gateway.complete_json(
-                    system_prompt="test",
-                    payload={"key": "value"},
-                )
+        with (
+            override_settings(AI_AGENT_API_KEY=None),
+            pytest.raises(AIProviderError, match="not configured"),
+        ):
+            ai_gateway.complete_json(
+                system_prompt="test",
+                payload={"key": "value"},
+            )
 
     def test_uses_model_from_use_case(self) -> None:
         fake_response = Mock()
@@ -142,12 +144,14 @@ class TestCompleteJson:
         fake_client.post.side_effect = httpx.HTTPError("connection refused")
 
         gw = OpenAICompatibleGateway(client=fake_client)
-        with override_settings(AI_AGENT_API_KEY="sk-test"):
-            with pytest.raises(AIProviderError, match="connection refused"):
-                gw.complete_json(
-                    system_prompt="test",
-                    payload={"key": "value"},
-                )
+        with (
+            override_settings(AI_AGENT_API_KEY="sk-test"),
+            pytest.raises(AIProviderError, match="connection refused"),
+        ):
+            gw.complete_json(
+                system_prompt="test",
+                payload={"key": "value"},
+            )
 
     def test_invalid_json_response_wraps_as_ai_provider_error(self) -> None:
         fake_response = Mock()
@@ -159,12 +163,14 @@ class TestCompleteJson:
         fake_client.post.return_value = fake_response
 
         gw = OpenAICompatibleGateway(client=fake_client)
-        with override_settings(AI_AGENT_API_KEY="sk-test"):
-            with pytest.raises(AIProviderError):
-                gw.complete_json(
-                    system_prompt="test",
-                    payload={"key": "value"},
-                )
+        with (
+            override_settings(AI_AGENT_API_KEY="sk-test"),
+            pytest.raises(AIProviderError),
+        ):
+            gw.complete_json(
+                system_prompt="test",
+                payload={"key": "value"},
+            )
 
     def test_non_dict_json_output_wraps_as_ai_provider_error(self) -> None:
         fake_response = Mock()
@@ -176,14 +182,14 @@ class TestCompleteJson:
         fake_client.post.return_value = fake_response
 
         gw = OpenAICompatibleGateway(client=fake_client)
-        with override_settings(AI_AGENT_API_KEY="sk-test"):
-            with pytest.raises(
-                AIProviderError, match="JSON output must be an object"
-            ):
-                gw.complete_json(
-                    system_prompt="test",
-                    payload={"key": "value"},
-                )
+        with (
+            override_settings(AI_AGENT_API_KEY="sk-test"),
+            pytest.raises(AIProviderError, match="JSON output must be an object"),
+        ):
+            gw.complete_json(
+                system_prompt="test",
+                payload={"key": "value"},
+            )
 
 
 class TestGatewayProviderName:
@@ -231,6 +237,4 @@ class TestGatewayClientWithoutApiKey:
                 with override_settings(AI_AGENT_API_KEY=None):
                     _ = gw.client
                     call_kwargs = mock_httpx.Client.call_args[1]
-                    assert "Authorization" not in call_kwargs.get(
-                        "headers", {}
-                    )
+                    assert "Authorization" not in call_kwargs.get("headers", {})

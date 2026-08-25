@@ -41,3 +41,9 @@ class SourceCatalogConflict(SyncOperationError):
     default_code = "sync.source_catalog_conflict"
     default_message = "The source catalog contains conflicting records."
     default_status = HTTPStatus.CONFLICT
+
+
+class SyncAIRequiredError(SyncOperationError):
+    default_code = "sync.ai_required"
+    default_message = "Required AI normalization did not produce a usable result."
+    default_status = HTTPStatus.SERVICE_UNAVAILABLE

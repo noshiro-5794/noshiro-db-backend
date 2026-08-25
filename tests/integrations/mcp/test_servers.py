@@ -245,10 +245,14 @@ def test_internal_search_entities_returns_safe_projection() -> None:
         visibility=Entity.Visibility.RESTRICTED,
     )
     EntityName.objects.create(
-        entity=public, text="Searchable", kind=EntityName.Kind.ORIGINAL,
+        entity=public,
+        text="Searchable",
+        kind=EntityName.Kind.ORIGINAL,
     )
     EntityName.objects.create(
-        entity=restricted, text="Hidden", kind=EntityName.Kind.ORIGINAL,
+        entity=restricted,
+        text="Hidden",
+        kind=EntityName.Kind.ORIGINAL,
     )
     server = create_internal_mcp_server()
 
@@ -280,13 +284,16 @@ def test_internal_get_match_candidate_returns_evidence() -> None:
 
 def test_get_public_entity_raises_for_nonexistent_id() -> None:
     import uuid
+
     with pytest.raises(ValueError, match="Public entity not found"):
         get_public_entity(entity_id=uuid.uuid4())
 
 
 def test_get_match_candidate_raises_for_nonexistent_id() -> None:
     import uuid
+
     from integrations.mcp.queries import get_match_candidate
+
     with pytest.raises(ValueError, match="Match candidate not found"):
         get_match_candidate(candidate_id=uuid.uuid4())
 
@@ -300,8 +307,12 @@ def test_get_public_relations_skips_non_public_and_duplicates() -> None:
         kind=Entity.Kind.WORK,
         visibility=Entity.Visibility.RESTRICTED,
     )
-    EntityName.objects.create(entity=public, text="Public", kind=EntityName.Kind.ORIGINAL)
-    EntityName.objects.create(entity=restricted, text="Hidden", kind=EntityName.Kind.ORIGINAL)
+    EntityName.objects.create(
+        entity=public, text="Public", kind=EntityName.Kind.ORIGINAL
+    )
+    EntityName.objects.create(
+        entity=restricted, text="Hidden", kind=EntityName.Kind.ORIGINAL
+    )
 
     EntityRelation.objects.create(
         from_entity=public,
@@ -310,5 +321,3 @@ def test_get_public_relations_skips_non_public_and_duplicates() -> None:
     )
     result = get_public_relations(entity_id=public.id)
     assert result["results"] == []
-
-

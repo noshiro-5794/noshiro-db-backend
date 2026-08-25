@@ -12,9 +12,7 @@ from apps.ai.tasks import (
 @pytest.mark.django_db(transaction=True)
 class TestEvaluateMatchCandidateTask:
     def test_returns_proposal_id(self) -> None:
-        with patch(
-            "apps.ai.tasks.ai_matching_service.evaluate"
-        ) as mock_evaluate:
+        with patch("apps.ai.tasks.ai_matching_service.evaluate") as mock_evaluate:
             mock_evaluate.return_value.id = "proposal-uuid"
             result = evaluate_match_candidate_task("candidate-uuid")
             assert result == "proposal-uuid"

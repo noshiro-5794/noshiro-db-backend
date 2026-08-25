@@ -1,9 +1,7 @@
-from http import HTTPStatus
 from unittest.mock import MagicMock
 
 import pytest
 from django.test import override_settings
-from rest_framework import status
 from rest_framework.exceptions import ValidationError
 
 from shared.api.exception_handler import (

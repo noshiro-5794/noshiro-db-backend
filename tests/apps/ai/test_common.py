@@ -28,7 +28,11 @@ class TestValidateMatchingOutput:
 
     def test_valid_abstain_decision(self) -> None:
         output = validate_matching_output(
-            {"decision": "abstain", "confidence": "0.5", "reason": "Not enough evidence."}
+            {
+                "decision": "abstain",
+                "confidence": "0.5",
+                "reason": "Not enough evidence.",
+            }
         )
         assert output["decision"] == "abstain"
 

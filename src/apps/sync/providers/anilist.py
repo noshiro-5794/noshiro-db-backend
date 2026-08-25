@@ -4,7 +4,11 @@ import httpx
 from django.conf import settings
 
 from apps.index.models import Provider, ProviderNamespace
-from apps.sync.providers.contracts import CatalogSourceSpec, SourceNamespaceSpec
+from apps.sync.providers.contracts import (
+    CatalogPage,
+    CatalogSourceSpec,
+    SourceNamespaceSpec,
+)
 from apps.sync.providers.exceptions import AniListAPIError
 from apps.sync.providers.rate_limiter import RateLimiter
 from shared.outbound import httpx_client_kwargs
@@ -67,6 +71,14 @@ ANILIST_TAG_NAMESPACE = SourceNamespaceSpec(
 
 
 class AniListClient:
+    CATALOG_QUERY = """
+    query ($page: Int!, $perPage: Int!) {
+      Page(page: $page, perPage: $perPage) {
+        pageInfo { hasNextPage total }
+        media(type: ANIME, sort: ID) { id }
+      }
+    }
+    """
     MEDIA_QUERY = """
     query ($id: Int, $page: Int, $perPage: Int) {
       Media(id: $id, type: ANIME) {
@@ -184,6 +196,34 @@ class AniListClient:
         if not isinstance(media, dict):
             raise AniListAPIError(f"AniList media {anilist_id} was not found.")
         return media
+
+    def discover_anime_page(
+        self, *, cursor: str | None = None, page_size: int = 50
+    ) -> CatalogPage:
+        """Discover AniList anime IDs using the provider's cursor-like page API."""
+        page = max(1, int(cursor or "1"))
+        data = self._post(
+            self.CATALOG_QUERY,
+            {"page": page, "perPage": min(max(page_size, 1), 50)},
+        )
+        page_data = data.get("Page")
+        if not isinstance(page_data, dict):
+            raise AniListAPIError("AniList returned an invalid catalog page.")
+        external_ids = tuple(
+            str(item["id"])
+            for item in page_data.get("media") or []
+            if isinstance(item, dict) and isinstance(item.get("id"), int)
+        )
+        page_info = page_data.get("pageInfo") or {}
+        return CatalogPage(
+            external_ids=external_ids,
+            next_cursor=str(page + 1) if page_info.get("hasNextPage") else None,
+            total_count=(
+                int(page_info["total"])
+                if isinstance(page_info.get("total"), int)
+                else None
+            ),
+        )
 
     def close(self) -> None:
         if self._client is not None:

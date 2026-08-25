@@ -56,7 +56,18 @@ uv run python src/manage.py sync_calendar
 uv run python src/manage.py sync_subject --bangumi-id 123
 uv run python src/manage.py sync_vndb v17
 uv run python src/manage.py sync_vndb v17 --without-related
+# Durable provider-wide sync; defaults to evidence-only AI shadow mode.
+uv run python src/manage.py sync_campaign vndb --ai-mode shadow
+uv run python src/manage.py sync_campaign anilist --ai-mode shadow --page-size 50
+# Limit a rehearsal to a bounded number of imported records.
+uv run python src/manage.py sync_campaign vndb --max-items 20 --ai-sample-size 20
 ```
+
+`sync_campaign` is resumable and idempotent for the same provider, campaign type,
+and parameters. Provider discovery and canonical imports remain deterministic;
+`--ai-mode assisted` records reviewable claims, while `required` fails the campaign
+when the configured AI contract cannot produce a usable result. AI never writes a
+canonical field directly.
 
 ## API Contract
 
@@ -75,8 +86,9 @@ uv run python src/manage.py makemigrations --check --dry-run
 uv run python src/manage.py spectacular --validate --fail-on-warn
 ```
 
-Full tests require the dedicated PostgreSQL test database. App-owned tests live in
-`src/apps/<app>/tests/`; cross-app contracts and integration tests live in `tests/`.
+Full tests require the dedicated PostgreSQL test database. All tests live in the
+root `tests/` package, organized by app ownership, cross-app contracts, and
+integrations; production `src/` contains runtime code only.
 
 Regenerate the OpenAPI snapshot only for an intentional contract change:
 

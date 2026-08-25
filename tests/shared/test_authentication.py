@@ -10,10 +10,13 @@ class TestContextJWTAuthentication:
         mock_user.pk = 42
         mock_request = MagicMock()
 
-        with patch(
-            "shared.api.authentication.JWTAuthentication.authenticate",
-            return_value=(mock_user, "token"),
-        ), patch("shared.api.authentication.set_user_id") as mock_set:
+        with (
+            patch(
+                "shared.api.authentication.JWTAuthentication.authenticate",
+                return_value=(mock_user, "token"),
+            ),
+            patch("shared.api.authentication.set_user_id") as mock_set,
+        ):
             result = auth.authenticate(mock_request)
             mock_set.assert_called_once_with(42)
             assert result == (mock_user, "token")
@@ -22,10 +25,13 @@ class TestContextJWTAuthentication:
         auth = ContextJWTAuthentication()
         mock_request = MagicMock()
 
-        with patch(
-            "shared.api.authentication.JWTAuthentication.authenticate",
-            return_value=None,
-        ), patch("shared.api.authentication.set_user_id") as mock_set:
+        with (
+            patch(
+                "shared.api.authentication.JWTAuthentication.authenticate",
+                return_value=None,
+            ),
+            patch("shared.api.authentication.set_user_id") as mock_set,
+        ):
             result = auth.authenticate(mock_request)
             mock_set.assert_not_called()
             assert result is None

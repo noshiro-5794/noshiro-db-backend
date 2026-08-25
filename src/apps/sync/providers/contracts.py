@@ -31,3 +31,12 @@ class FetchedSourceRecord:
     response_metadata: dict[str, Any] = field(default_factory=dict)
     upstream_updated_at: datetime | None = None
     fetched_at: datetime | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class CatalogPage:
+    """A bounded page from a provider-wide catalog discovery endpoint."""
+
+    external_ids: tuple[str, ...]
+    next_cursor: str | None
+    total_count: int | None = None

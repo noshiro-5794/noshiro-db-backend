@@ -5,7 +5,11 @@ import httpx
 from django.conf import settings
 
 from apps.index.models import Provider, ProviderNamespace
-from apps.sync.providers.contracts import CatalogSourceSpec, SourceNamespaceSpec
+from apps.sync.providers.contracts import (
+    CatalogPage,
+    CatalogSourceSpec,
+    SourceNamespaceSpec,
+)
 from apps.sync.providers.exceptions import VNDBAPIError
 from shared.outbound import httpx_client_kwargs
 
@@ -182,6 +186,32 @@ class VNDBClient:
         if not data["results"]:
             raise VNDBAPIError(f"VNDB work {vndb_id} was not found.")
         return data["results"][0]
+
+    def discover_vn_page(
+        self, *, cursor: str | None = None, page_size: int = 100
+    ) -> CatalogPage:
+        """Discover stable VNDB work IDs without fetching canonical payloads."""
+        page = max(1, int(cursor or "1"))
+        data = self.query(
+            "vn",
+            filters=[],
+            fields="id",
+            page=page,
+            results=page_size,
+            count=True,
+        )
+        external_ids = tuple(
+            item["id"]
+            for item in data["results"]
+            if isinstance(item, dict) and isinstance(item.get("id"), str)
+        )
+        return CatalogPage(
+            external_ids=external_ids,
+            next_cursor=str(page + 1) if data.get("more") else None,
+            total_count=(
+                int(data["count"]) if isinstance(data.get("count"), int) else None
+            ),
+        )
 
     def fetch_related(self, endpoint: str, *, vndb_id: str, fields: str) -> list[dict]:
         page = 1
