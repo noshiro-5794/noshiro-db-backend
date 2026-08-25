@@ -23,6 +23,11 @@ class EntityQuerySerializer(serializers.Serializer):
         choices=("index", "all"),
         default="index",
     )
+    subject_type = serializers.ChoiceField(
+        required=False,
+        choices=Work.WorkType.choices,
+    )
+    nsfw = serializers.BooleanField(required=False)
 
 
 class FieldProvenanceSerializer(serializers.Serializer):
@@ -219,4 +224,6 @@ class CalendarEventSerializer(serializers.Serializer):
     weekday = serializers.IntegerField(allow_null=True, min_value=1, max_value=7)
     precision = serializers.CharField()
     raw_value = serializers.CharField(allow_blank=True)
+    collection_doing = serializers.IntegerField(min_value=0)
+    work = EntitySummarySerializer(required=False, allow_null=True)
     provenance = FieldProvenanceSerializer(allow_null=True)

@@ -498,6 +498,7 @@ class AiringEvent(TimestampedModel):
         default=Precision.UNKNOWN,
     )
     raw_value = models.CharField(max_length=256, blank=True)
+    collection_doing = models.PositiveIntegerField(default=0)
     observation = models.ForeignKey(
         "Observation",
         on_delete=models.PROTECT,

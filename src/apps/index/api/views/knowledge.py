@@ -97,6 +97,8 @@ class CollectionEntityListView(APIView):
             keyword=serializer.validated_data.get("query", "").strip(),
             collection=slug,
             scope="index",
+            subject_type=serializer.validated_data.get("subject_type", ""),
+            safe_only=serializer.validated_data.get("nsfw", False) is False,
         )
         paginator = DefaultPageNumberPagination()
         page = paginator.paginate_queryset(qs, request, view=self)
@@ -136,6 +138,8 @@ class EntityListView(APIView):
             keyword=values.get("query", "").strip(),
             collection=values.get("collection", ""),
             scope=values.get("scope", "index"),
+            subject_type=values.get("subject_type", ""),
+            safe_only=values.get("nsfw", False) is False,
         )
         paginator = DefaultPageNumberPagination()
         page = paginator.paginate_queryset(qs, request, view=self)
@@ -613,6 +617,7 @@ class CalendarEventListView(APIView):
             OpenApiParameter("from", OpenApiTypes.DATETIME),
             OpenApiParameter("to", OpenApiTypes.DATETIME),
             OpenApiParameter("timezone", OpenApiTypes.STR),
+            OpenApiParameter("include_work", OpenApiTypes.BOOL),
         ],
         responses=api_responses(
             {200: CalendarEventSerializer(many=True)}, errors=(400,)
@@ -628,6 +633,11 @@ class CalendarEventListView(APIView):
         serializer = CalendarQuerySerializer(data=query)
         serializer.is_valid(raise_exception=True)
         values = serializer.validated_data
+        include_work = request.query_params.get("include_work", "").lower() in {
+            "1",
+            "true",
+            "yes",
+        }
         qs = (
             current_airing_events()
             .filter(
@@ -688,6 +698,8 @@ class CalendarEventListView(APIView):
                     "weekday": event.weekday,
                     "precision": event.precision,
                     "raw_value": event.raw_value,
+                    "collection_doing": event.collection_doing,
+                    **({"work": summary} if include_work else {}),
                     "provenance": field_provenance(
                         provider_record=(
                             event.observation.provider_record

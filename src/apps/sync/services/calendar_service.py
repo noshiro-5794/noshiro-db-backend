@@ -120,6 +120,7 @@ class CalendarSyncService:
                                     else AiringEvent.Precision.UNKNOWN
                                 ),
                                 raw_value=cls._weekday_raw_value(weekday),
+                                collection_doing=cls._collection_doing(item),
                             )
                         )
 
@@ -290,6 +291,18 @@ class CalendarSyncService:
             if isinstance(value, str) and value.strip():
                 return value.strip()[:256]
         return ""
+
+    @staticmethod
+    def _collection_doing(item: dict) -> int:
+        collection = item.get("collection")
+        if not isinstance(collection, dict):
+            return 0
+        doing = collection.get("doing")
+        return (
+            doing
+            if isinstance(doing, int) and not isinstance(doing, bool) and doing >= 0
+            else 0
+        )
 
     @staticmethod
     @transaction.atomic

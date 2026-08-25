@@ -305,7 +305,14 @@ def entity_detail(
     return data
 
 
-def entity_queryset(*, keyword: str = "", collection: str = "", scope: str = ""):
+def entity_queryset(
+    *,
+    keyword: str = "",
+    collection: str = "",
+    scope: str = "",
+    subject_type: str = "",
+    safe_only: bool = False,
+):
     qs = Entity.objects.filter(
         lifecycle=Entity.Lifecycle.ACTIVE,
         visibility=Entity.Visibility.PUBLIC,
@@ -350,6 +357,10 @@ def entity_queryset(*, keyword: str = "", collection: str = "", scope: str = "")
             for entity in Entity.objects.filter(pk__in=matching_ids)
         }
         qs = qs.filter(pk__in=canonical_ids)
+    if subject_type:
+        qs = qs.filter(work__work_type=subject_type)
+    if safe_only:
+        qs = qs.exclude(audience=Entity.Audience.ADULT)
     return qs.distinct().order_by("-updated_at", "id")
 
 
