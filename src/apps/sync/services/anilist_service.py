@@ -47,6 +47,7 @@ from apps.sync.providers.anilist import (
     anilist_client,
 )
 from apps.sync.providers.contracts import FetchedSourceRecord
+from apps.sync.services.relation_types import canonical_relation_type
 from apps.sync.services.source_record_service import source_record_service
 
 
@@ -384,22 +385,28 @@ class AniListImportService:
 
     def _import_relations(self, *, entity, observation, media) -> None:
         relations = media.get("relations") or {}
-        for edge in (
+        for index, edge in enumerate(
             relations.get("edges") or [] if isinstance(relations, dict) else relations
         ):
             if not isinstance(edge, dict):
                 continue
             node = edge.get("node") or {}
-            relation_type = edge.get("relationType")
-            if not isinstance(relation_type, str) or not isinstance(node, dict):
+            raw_relation = edge.get("relationType")
+            if not isinstance(raw_relation, str) or not isinstance(node, dict):
                 continue
             target = self._ensure_related_entity(node)
             if target is None:
                 continue
-            EntityRelation.objects.get_or_create(
+            relation, _ = EntityRelation.objects.get_or_create(
                 from_entity=entity,
                 to_entity=target,
-                relation_type=slugify(relation_type),
+                relation_type=canonical_relation_type("anilist", raw_relation),
+            )
+            EntityRelationEvidence.objects.get_or_create(
+                relation=relation,
+                observation=observation,
+                json_pointer=f"/relations/edges/{index}",
+                defaults={"raw_relation": raw_relation[:256]},
             )
 
     def _ensure_related_entity(self, node: dict[str, Any]) -> Entity | None:

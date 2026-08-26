@@ -40,3 +40,27 @@ class CatalogPage:
     external_ids: tuple[str, ...]
     next_cursor: str | None
     total_count: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class DeltaPage:
+    """Changed external IDs after a provider watermark."""
+
+    external_ids: tuple[str, ...]
+    next_cursor: str | None
+    watermark: str
+    upstream_updated_at: datetime | None = None
+
+
+class ProviderCatalogContract:
+    """Explicit discovery contract shared by full and incremental campaigns."""
+
+    supports_delta = False
+
+    def discover_full(self, *, cursor: str | None, page_size: int) -> CatalogPage:
+        raise NotImplementedError
+
+    def discover_delta(
+        self, *, watermark: str, cursor: str | None, page_size: int
+    ) -> DeltaPage:
+        raise NotImplementedError("Provider has no reliable delta feed.")

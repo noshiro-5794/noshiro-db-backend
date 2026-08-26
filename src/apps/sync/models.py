@@ -125,6 +125,7 @@ class SyncCampaign(models.Model):
         RECONCILING = "reconciling", "Reconciling"
         ENRICHING = "enriching", "Enriching"
         REVIEWING = "reviewing", "Reviewing"
+        PAUSED = "paused", "Paused"
         COMPLETED = "completed", "Completed"
         FAILED = "failed", "Failed"
         CANCELLED = "cancelled", "Cancelled"
@@ -161,6 +162,10 @@ class SyncCampaign(models.Model):
     quality_report = models.JSONField(null=True, blank=True)
     cost = models.DecimalField(max_digits=12, decimal_places=6, null=True, blank=True)
     error = models.TextField(blank=True)
+    heartbeat_at = models.DateTimeField(null=True, blank=True)
+    lease_owner = models.CharField(max_length=128, blank=True)
+    lease_expires_at = models.DateTimeField(null=True, blank=True)
+    next_run_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     started_at = models.DateTimeField(null=True, blank=True)
     finished_at = models.DateTimeField(null=True, blank=True)
@@ -174,6 +179,12 @@ class SyncCampaign(models.Model):
             ),
             models.Index(
                 fields=["status", "-created_at"], name="idx_sync_campaign_status"
+            ),
+            models.Index(
+                fields=["status", "next_run_at"], name="idx_sync_campaign_next_run"
+            ),
+            models.Index(
+                fields=["status", "lease_expires_at"], name="idx_sync_campaign_lease"
             ),
         ]
         constraints = [
@@ -214,6 +225,8 @@ class SyncWorkItem(models.Model):
     result = models.JSONField(null=True, blank=True)
     error = models.TextField(blank=True)
     attempt = models.PositiveSmallIntegerField(default=0)
+    next_retry_at = models.DateTimeField(null=True, blank=True)
+    last_error_code = models.CharField(max_length=64, blank=True)
     lease_owner = models.CharField(max_length=128, blank=True)
     lease_expires_at = models.DateTimeField(null=True, blank=True)
     ai_processed_at = models.DateTimeField(null=True, blank=True)
@@ -234,5 +247,9 @@ class SyncWorkItem(models.Model):
             models.Index(fields=["campaign", "status"], name="idx_sync_wi_camp_status"),
             models.Index(
                 fields=["status", "lease_expires_at"], name="idx_sync_wi_lease"
+            ),
+            models.Index(
+                fields=["campaign", "status", "next_retry_at"],
+                name="idx_sync_wi_retry",
             ),
         ]

@@ -366,6 +366,10 @@ VNDB_USER_AGENT = env(
     default="Noshiro_5794/noshiro_db (https://github.com/noshiro-5794)",
 )
 VNDB_TIMEOUT = env.float("VNDB_TIMEOUT", default=30)
+VNDB_RATE_LIMIT_INTERVAL = env.float(
+    "VNDB_RATE_LIMIT_INTERVAL",
+    default=1.0,
+)
 
 ANILIST_API_BASE_URL = env(
     "ANILIST_API_BASE_URL",

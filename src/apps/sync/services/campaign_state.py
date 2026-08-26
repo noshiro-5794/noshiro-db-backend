@@ -31,6 +31,18 @@ for _status in (
 ):
     _TRANSITIONS[(_status, "failed")] = "failed"
     _TRANSITIONS[(_status, "cancelled")] = "cancelled"
+    _TRANSITIONS[(_status, "paused")] = "paused"
+
+for _status in (
+    "discovering",
+    "fetching",
+    "mapping",
+    "normalizing",
+    "reconciling",
+    "enriching",
+    "reviewing",
+):
+    _TRANSITIONS[("paused", _status)] = _status
 
 
 @dataclass

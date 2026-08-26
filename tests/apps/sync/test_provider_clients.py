@@ -177,3 +177,29 @@ def test_anilist_catalog_discovery_uses_page_info() -> None:
     assert page.external_ids == ("10", "11")
     assert page.next_cursor is None
     assert page.total_count == 2
+
+
+def test_anilist_delta_discovery_uses_updated_watermark() -> None:
+    http_client = Mock()
+    response = http_client.post.return_value
+    response.json.return_value = {
+        "data": {
+            "Page": {
+                "pageInfo": {"hasNextPage": True},
+                "media": [{"id": 10, "updatedAt": 1700000000}],
+            }
+        }
+    }
+    with patch(
+        "apps.sync.providers.anilist.Provider.objects.filter"
+    ) as provider_filter:
+        provider_filter.return_value.first.return_value = None
+        page = AniListClient(http_client).discover_anime_delta_page(
+            watermark="1690000000", cursor="2", page_size=25
+        )
+
+    assert page.external_ids == ("10",)
+    assert page.next_cursor == "3"
+    assert page.watermark == "1690000000"
+    variables = http_client.post.call_args.kwargs["json"]["variables"]
+    assert variables == {"page": 2, "perPage": 25, "updatedAfter": 1690000000}

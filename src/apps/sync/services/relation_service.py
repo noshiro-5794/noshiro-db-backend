@@ -1,5 +1,4 @@
 from django.db import transaction
-from django.utils.text import slugify
 
 from apps.index.models import (
     Appearance,
@@ -22,6 +21,7 @@ from apps.sync.providers.bangumi import (
 from apps.sync.providers.contracts import FetchedSourceRecord
 from apps.sync.services.character_service import character_service
 from apps.sync.services.name_normalizer import name_normalizer
+from apps.sync.services.relation_types import canonical_relation_type
 from apps.sync.services.source_record_service import source_record_service
 from apps.sync.services.staff_service import staff_service
 from apps.sync.services.subject_service import subject_service
@@ -77,11 +77,10 @@ class RelationService:
                 target = target_map.get(str(item["id"]))
                 if target is None:
                     continue
-                relation_type = (
-                    name_normalizer.normalize_name(item.get("relation") or "")
-                    or "related"
+                relation_type = canonical_relation_type(
+                    "bangumi",
+                    name_normalizer.normalize_name(item.get("relation") or ""),
                 )
-                relation_type = slugify(relation_type)[:128] or "related"
                 relation, _ = EntityRelation.objects.get_or_create(
                     from_entity=source,
                     to_entity=target,

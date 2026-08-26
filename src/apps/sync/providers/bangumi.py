@@ -4,9 +4,13 @@ import httpx
 from django.conf import settings
 
 from apps.index.models import Provider
-from apps.sync.providers.contracts import CatalogSourceSpec, SourceNamespaceSpec
+from apps.sync.providers.contracts import (
+    CatalogPage,
+    CatalogSourceSpec,
+    SourceNamespaceSpec,
+)
 from apps.sync.providers.exceptions import BangumiAPIError
-from apps.sync.providers.rate_limiter import RateLimiter
+from apps.sync.providers.rate_limiter import DistributedRateLimiter
 from shared.outbound import httpx_client_kwargs
 
 BANGUMI_SOURCE = CatalogSourceSpec(
@@ -71,12 +75,15 @@ BANGUMI_CALENDAR_NAMESPACE = SourceNamespaceSpec(
     description="Point-in-time Bangumi weekly broadcast calendar",
 )
 
-rate_limiter = RateLimiter(interval=settings.BANGUMI_RATE_LIMIT_INTERVAL)
-
 
 class BangumiClient:
     def __init__(self, client: httpx.Client | None = None) -> None:
         self._client = client
+        self._rate_limiter = DistributedRateLimiter(
+            "bangumi",
+            settings.BANGUMI_RATE_LIMIT_INTERVAL,
+            allow_fallback=client is not None,
+        )
 
     @property
     def client(self) -> httpx.Client:
@@ -114,7 +121,7 @@ class BangumiClient:
                 raise BangumiAPIError(
                     "Bangumi provider forbids source payload storage."
                 )
-        rate_limiter.acquire()
+        self._rate_limiter.acquire()
         try:
             response = self.client.get(path, **kwargs)
             response.raise_for_status()
@@ -137,6 +144,28 @@ class BangumiClient:
 
     def fetch_subject(self, subject_id: int) -> dict[str, Any]:
         return self._get(f"/v0/subjects/{subject_id}")
+
+    def discover_subject_page(
+        self, *, cursor: str | None = None, page_size: int = 100
+    ) -> CatalogPage:
+        """Walk Bangumi's offset catalog; completion is proven by a short page."""
+        offset = max(0, int(cursor or "0"))
+        limit = min(max(page_size, 1), 100)
+        data = self._get(
+            "/v0/subjects",
+            params={"limit": limit, "offset": offset, "sort": "id"},
+        )
+        if not isinstance(data, list):
+            raise BangumiAPIError("Bangumi subjects response must be a list.")
+        external_ids = tuple(
+            str(item["id"])
+            for item in data
+            if isinstance(item, dict) and isinstance(item.get("id"), int)
+        )
+        return CatalogPage(
+            external_ids=external_ids,
+            next_cursor=str(offset + limit) if len(data) == limit else None,
+        )
 
     def fetch_subject_persons(self, subject_id: int) -> list[dict[str, Any]]:
         return self._get(f"/v0/subjects/{subject_id}/persons")

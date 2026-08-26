@@ -11,6 +11,7 @@ from apps.sync.providers.contracts import (
     SourceNamespaceSpec,
 )
 from apps.sync.providers.exceptions import VNDBAPIError
+from apps.sync.providers.rate_limiter import DistributedRateLimiter
 from shared.outbound import httpx_client_kwargs
 
 VNDB_SOURCE = CatalogSourceSpec(
@@ -115,6 +116,11 @@ class VNDBClient:
 
     def __init__(self, client: httpx.Client | None = None) -> None:
         self._client = client
+        self._rate_limiter = DistributedRateLimiter(
+            "vndb",
+            getattr(settings, "VNDB_RATE_LIMIT_INTERVAL", 0.5),
+            allow_fallback=client is not None,
+        )
 
     @property
     def client(self) -> httpx.Client:
@@ -160,13 +166,16 @@ class VNDBClient:
             "count": count,
         }
         try:
+            self._rate_limiter.acquire()
             response = self.client.post(f"/{endpoint}", json=payload)
             response.raise_for_status()
             data = response.json()
         except httpx.HTTPStatusError as exc:
             detail = exc.response.text[:500]
             raise VNDBAPIError(
-                f"VNDB {endpoint} returned {exc.response.status_code}: {detail}"
+                f"VNDB {endpoint} returned {exc.response.status_code}: {detail}",
+                status_code=exc.response.status_code,
+                retry_after=_retry_after(exc.response),
             ) from exc
         except httpx.RequestError as exc:
             raise VNDBAPIError(f"VNDB {endpoint} request failed: {exc}") from exc
@@ -273,3 +282,13 @@ class VNDBClient:
 
 
 vndb_client = VNDBClient()
+
+
+def _retry_after(response: httpx.Response) -> float | None:
+    value = response.headers.get("retry-after")
+    if value is None:
+        return None
+    try:
+        return max(0.0, float(value))
+    except ValueError:
+        return None

@@ -5081,6 +5081,196 @@
                 }
             }
         },
+        "/api/v1/operations/sync/": {
+            "get": {
+                "operationId": "get_api_v1_operations_sync",
+                "tags": [
+                    "v1"
+                ],
+                "security": [
+                    {
+                        "jwtAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/SyncCampaign"
+                                    }
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            },
+            "post": {
+                "operationId": "post_api_v1_operations_sync",
+                "tags": [
+                    "v1"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SyncCampaignCreate"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SyncCampaignCreate"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SyncCampaignCreate"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "jwtAuth": []
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SyncCampaign"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v1/operations/sync/{campaign_id}/": {
+            "get": {
+                "operationId": "get_api_v1_operations_sync_by_campaign_id",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "campaign_id",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "v1"
+                ],
+                "security": [
+                    {
+                        "jwtAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SyncCampaign"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v1/operations/sync/{campaign_id}/{action}/": {
+            "post": {
+                "operationId": "post_api_v1_operations_sync_by_campaign_id_by_action",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "action",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "campaign_id",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "v1"
+                ],
+                "security": [
+                    {
+                        "jwtAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SyncCampaign"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v1/operations/sync/{campaign_id}/items/": {
+            "get": {
+                "operationId": "get_api_v1_operations_sync_by_campaign_id_items",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "campaign_id",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "v1"
+                ],
+                "security": [
+                    {
+                        "jwtAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/SyncWorkItem"
+                                    }
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
         "/api/v1/users/{user_id}/": {
             "get": {
                 "operationId": "get_api_v1_users_by_user_id",
@@ -9427,6 +9617,16 @@
                 "type": "string",
                 "description": "* `post_created` - Post created\n* `user_subject_created` - User subject created\n* `user_subject_updated` - User subject updated\n* `review_created` - Review created\n* `collection_created` - Collection created\n* `collection_item_added` - Collection item added\n* `comment_created` - Comment created\n* `user_followed` - User followed"
             },
+            "AiModeEnum": {
+                "enum": [
+                    "off",
+                    "shadow",
+                    "assisted",
+                    "required"
+                ],
+                "type": "string",
+                "description": "* `off` - Off\n* `shadow` - Shadow\n* `assisted` - Assisted\n* `required` - Required"
+            },
             "AppearanceEnum": {
                 "enum": [
                     "auto",
@@ -9582,6 +9782,14 @@
                     "weekday",
                     "work_id"
                 ]
+            },
+            "CampaignTypeEnum": {
+                "enum": [
+                    "full",
+                    "incremental"
+                ],
+                "type": "string",
+                "description": "* `full` - full\n* `incremental` - incremental"
             },
             "CodeLogin": {
                 "type": "object",
@@ -12986,6 +13194,172 @@
                     "purpose"
                 ]
             },
+            "SyncCampaign": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "readOnly": true
+                    },
+                    "provider_slug": {
+                        "type": "string",
+                        "maxLength": 64
+                    },
+                    "campaign_type": {
+                        "type": "string",
+                        "maxLength": 32
+                    },
+                    "status": {
+                        "$ref": "#/components/schemas/SyncCampaignStatusEnum"
+                    },
+                    "ai_mode": {
+                        "$ref": "#/components/schemas/AiModeEnum"
+                    },
+                    "parameters": {},
+                    "total_items": {
+                        "type": "integer",
+                        "maximum": 2147483647,
+                        "minimum": 0
+                    },
+                    "processed_items": {
+                        "type": "integer",
+                        "maximum": 2147483647,
+                        "minimum": 0
+                    },
+                    "synced_items": {
+                        "type": "integer",
+                        "maximum": 2147483647,
+                        "minimum": 0
+                    },
+                    "skipped_items": {
+                        "type": "integer",
+                        "maximum": 2147483647,
+                        "minimum": 0
+                    },
+                    "failed_items": {
+                        "type": "integer",
+                        "maximum": 2147483647,
+                        "minimum": 0
+                    },
+                    "quality_report": {
+                        "nullable": true
+                    },
+                    "cost": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,6}(?:\\.\\d{0,6})?$",
+                        "nullable": true
+                    },
+                    "error": {
+                        "type": "string"
+                    },
+                    "heartbeat_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "next_run_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    },
+                    "started_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "finished_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "updated_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    },
+                    "progress": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "oneOf": [
+                                {
+                                    "type": "integer"
+                                },
+                                {
+                                    "type": "number",
+                                    "format": "double"
+                                }
+                            ],
+                            "nullable": true
+                        },
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "campaign_type",
+                    "created_at",
+                    "id",
+                    "progress",
+                    "provider_slug",
+                    "updated_at"
+                ]
+            },
+            "SyncCampaignCreate": {
+                "type": "object",
+                "properties": {
+                    "provider": {
+                        "type": "string"
+                    },
+                    "campaign_type": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/CampaignTypeEnum"
+                            }
+                        ],
+                        "default": "full"
+                    },
+                    "ai_mode": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/AiModeEnum"
+                            }
+                        ],
+                        "default": "shadow"
+                    },
+                    "parameters": {},
+                    "idempotency_key": {
+                        "type": "string",
+                        "maxLength": 128
+                    }
+                },
+                "required": [
+                    "provider"
+                ]
+            },
+            "SyncCampaignStatusEnum": {
+                "enum": [
+                    "queued",
+                    "discovering",
+                    "fetching",
+                    "mapping",
+                    "normalizing",
+                    "reconciling",
+                    "enriching",
+                    "reviewing",
+                    "paused",
+                    "completed",
+                    "failed",
+                    "cancelled"
+                ],
+                "type": "string",
+                "description": "* `queued` - Queued\n* `discovering` - Discovering\n* `fetching` - Fetching\n* `mapping` - Mapping\n* `normalizing` - Normalizing\n* `reconciling` - Reconciling\n* `enriching` - Enriching\n* `reviewing` - Reviewing\n* `paused` - Paused\n* `completed` - Completed\n* `failed` - Failed\n* `cancelled` - Cancelled"
+            },
             "SyncJobStatus": {
                 "enum": [
                     "queued",
@@ -12995,6 +13369,89 @@
                 ],
                 "type": "string",
                 "description": "* `queued` - Queued\n* `running` - Running\n* `succeeded` - Succeeded\n* `failed` - Failed"
+            },
+            "SyncWorkItem": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "readOnly": true
+                    },
+                    "shard": {
+                        "type": "integer",
+                        "maximum": 2147483647,
+                        "minimum": 0
+                    },
+                    "cursor": {
+                        "type": "string",
+                        "maxLength": 512
+                    },
+                    "status": {
+                        "$ref": "#/components/schemas/SyncWorkItemStatusEnum"
+                    },
+                    "provider_record": {
+                        "type": "string",
+                        "format": "uuid",
+                        "nullable": true
+                    },
+                    "result": {
+                        "nullable": true
+                    },
+                    "error": {
+                        "type": "string"
+                    },
+                    "attempt": {
+                        "type": "integer",
+                        "maximum": 32767,
+                        "minimum": 0
+                    },
+                    "next_retry_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "last_error_code": {
+                        "type": "string",
+                        "maxLength": 64
+                    },
+                    "ai_processed_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "started_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "finished_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "updated_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "cursor",
+                    "id",
+                    "updated_at"
+                ]
+            },
+            "SyncWorkItemStatusEnum": {
+                "enum": [
+                    "queued",
+                    "running",
+                    "succeeded",
+                    "failed",
+                    "skipped"
+                ],
+                "type": "string",
+                "description": "* `queued` - Queued\n* `running` - Running\n* `succeeded` - Succeeded\n* `failed` - Failed\n* `skipped` - Skipped"
             },
             "TargetReference": {
                 "type": "object",

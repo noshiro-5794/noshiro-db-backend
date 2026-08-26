@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -17,7 +18,7 @@ from datetime import timedelta
 from typing import Any
 
 from django.db import transaction
-from django.db.models import F
+from django.db.models import F, Q
 from django.utils import timezone
 
 from apps.index.models import (
@@ -28,12 +29,14 @@ from apps.index.models import (
 )
 from apps.sync.models import SyncCampaign, SyncWorkItem
 from apps.sync.providers.anilist import ANILIST_ANIME_NAMESPACE, anilist_client
+from apps.sync.providers.bangumi import BANGUMI_SUBJECT_NAMESPACE, bangumi_client
 from apps.sync.providers.contracts import CatalogPage
 from apps.sync.providers.exceptions import ProviderAPIError
 from apps.sync.providers.vndb import VNDB_VN_NAMESPACE, vndb_client
 from apps.sync.services.anilist_service import anilist_import_service
 from apps.sync.services.campaign_ai import SyncAIContext, sync_ai_service
 from apps.sync.services.campaign_state import SyncCampaignStateMachine
+from apps.sync.services.manual_sync_service import manual_subject_sync_service
 from apps.sync.services.vndb_service import vndb_import_service
 
 logger = logging.getLogger(__name__)
@@ -45,6 +48,7 @@ class CampaignProvider:
     namespace_slug: str
     discover: Callable[..., CatalogPage]
     import_item: Callable[[str], Entity]
+    discover_delta: Callable[..., Any] | None = None
 
 
 PROVIDERS: dict[str, CampaignProvider] = {
@@ -56,6 +60,12 @@ PROVIDERS: dict[str, CampaignProvider] = {
             vndb_id=external_id, include_related=True
         ),
     ),
+    "bangumi": CampaignProvider(
+        slug="bangumi",
+        namespace_slug=BANGUMI_SUBJECT_NAMESPACE.slug,
+        discover=bangumi_client.discover_subject_page,
+        import_item=lambda external_id: _import_bangumi_subject(external_id),
+    ),
     "anilist": CampaignProvider(
         slug="anilist",
         namespace_slug=ANILIST_ANIME_NAMESPACE.slug,
@@ -63,8 +73,14 @@ PROVIDERS: dict[str, CampaignProvider] = {
         import_item=lambda external_id: anilist_import_service.import_media(
             int(external_id)
         ),
+        discover_delta=anilist_client.discover_anime_delta_page,
     ),
 }
+
+
+def _import_bangumi_subject(external_id: str) -> Entity:
+    result = manual_subject_sync_service.sync_by_bangumi_id(bangumi_id=int(external_id))
+    return Entity.objects.get(pk=result["subject_id"])
 
 
 class CampaignProviderNotFound(ValueError):
@@ -75,8 +91,13 @@ class SyncCampaignService:
     """Create, resume, and execute one durable provider synchronization."""
 
     DEFAULT_PAGE_SIZE = 100
-    DEFAULT_AI_SAMPLE_SIZE = 16
-    WORK_ITEM_LEASE_SECONDS = 3600
+    DEFAULT_DISCOVERY_PAGES_PER_STEP = 1
+    DEFAULT_FETCH_BATCH_SIZE = 50
+    DEFAULT_MAX_ATTEMPTS = 5
+    DEFAULT_RETRY_BASE_SECONDS = 30
+    DEFAULT_AI_BATCH_SIZE = 50
+    WORK_ITEM_LEASE_SECONDS = 300
+    CAMPAIGN_LEASE_SECONDS = 600
 
     def provider_for(self, provider_slug: str) -> CampaignProvider:
         try:
@@ -119,13 +140,45 @@ class SyncCampaignService:
     def run(
         self, campaign: SyncCampaign, *, max_items: int | None = None
     ) -> SyncCampaign:
-        """Run all unfinished phases; every phase is safe to re-enter."""
+        """Run one bounded campaign step; the Celery task schedules the next step."""
         campaign = SyncCampaign.objects.get(pk=campaign.pk)
+        if campaign.status in {
+            SyncCampaign.Status.PAUSED,
+            SyncCampaign.Status.CANCELLED,
+            SyncCampaign.Status.COMPLETED,
+        }:
+            return campaign
+        owner = f"campaign:{uuid.uuid4()}"
+        now = timezone.now()
+        claimed = (
+            SyncCampaign.objects.filter(
+                pk=campaign.pk,
+            )
+            .filter(Q(lease_expires_at__isnull=True) | Q(lease_expires_at__lt=now))
+            .exclude(
+                status__in=[
+                    SyncCampaign.Status.PAUSED,
+                    SyncCampaign.Status.CANCELLED,
+                    SyncCampaign.Status.COMPLETED,
+                ]
+            )
+            .update(
+                lease_owner=owner,
+                lease_expires_at=now + timedelta(seconds=self.CAMPAIGN_LEASE_SECONDS),
+                heartbeat_at=now,
+            )
+        )
+        if claimed != 1:
+            return SyncCampaign.objects.get(pk=campaign.pk)
+        campaign.refresh_from_db()
         if campaign.status == SyncCampaign.Status.FAILED:
             campaign = self.resume(campaign)
         if campaign.status == SyncCampaign.Status.QUEUED and not self._transition(
             campaign, SyncCampaign.Status.DISCOVERING
         ):
+            SyncCampaign.objects.filter(pk=campaign.pk, lease_owner=owner).update(
+                lease_owner="", lease_expires_at=None, heartbeat_at=timezone.now()
+            )
             return SyncCampaign.objects.get(pk=campaign.pk)
         try:
             if campaign.status == SyncCampaign.Status.DISCOVERING:
@@ -145,11 +198,13 @@ class SyncCampaignService:
                     campaign, SyncCampaign.Status.NORMALIZING
                 )
             if campaign.status == SyncCampaign.Status.NORMALIZING:
-                self._normalize(campaign)
+                if not self._normalize(campaign):
+                    return SyncCampaign.objects.get(pk=campaign.pk)
                 campaign = self._transition_required(
                     campaign, SyncCampaign.Status.RECONCILING
                 )
             if campaign.status == SyncCampaign.Status.RECONCILING:
+                self._reconcile_provider_records(campaign)
                 campaign = self._transition_required(
                     campaign, SyncCampaign.Status.ENRICHING
                 )
@@ -165,7 +220,81 @@ class SyncCampaignService:
                 "Sync campaign failed", extra={"campaign_id": str(campaign.pk)}
             )
             self._fail(campaign, exc)
+        finally:
+            SyncCampaign.objects.filter(pk=campaign.pk, lease_owner=owner).update(
+                lease_owner="", lease_expires_at=None, heartbeat_at=timezone.now()
+            )
         return SyncCampaign.objects.get(pk=campaign.pk)
+
+    @transaction.atomic
+    def pause(self, campaign: SyncCampaign) -> SyncCampaign:
+        campaign = SyncCampaign.objects.select_for_update().get(pk=campaign.pk)
+        if campaign.status in {
+            SyncCampaign.Status.QUEUED,
+            SyncCampaign.Status.DISCOVERING,
+            SyncCampaign.Status.FETCHING,
+            SyncCampaign.Status.MAPPING,
+            SyncCampaign.Status.NORMALIZING,
+            SyncCampaign.Status.RECONCILING,
+            SyncCampaign.Status.ENRICHING,
+            SyncCampaign.Status.REVIEWING,
+        }:
+            params = dict(campaign.parameters or {})
+            params["paused_from"] = campaign.status
+            campaign.parameters = params
+            campaign.status = SyncCampaign.Status.PAUSED
+            campaign.next_run_at = None
+            campaign.save(
+                update_fields=["parameters", "status", "next_run_at", "updated_at"]
+            )
+        return campaign
+
+    @transaction.atomic
+    def resume_paused(self, campaign: SyncCampaign) -> SyncCampaign:
+        campaign = SyncCampaign.objects.select_for_update().get(pk=campaign.pk)
+        if campaign.status != SyncCampaign.Status.PAUSED:
+            return campaign
+        params = dict(campaign.parameters or {})
+        previous = params.pop("paused_from", SyncCampaign.Status.DISCOVERING)
+        valid = {
+            SyncCampaign.Status.QUEUED,
+            SyncCampaign.Status.DISCOVERING,
+            SyncCampaign.Status.FETCHING,
+            SyncCampaign.Status.MAPPING,
+            SyncCampaign.Status.NORMALIZING,
+            SyncCampaign.Status.RECONCILING,
+            SyncCampaign.Status.ENRICHING,
+            SyncCampaign.Status.REVIEWING,
+        }
+        campaign.status = (
+            previous if previous in valid else SyncCampaign.Status.DISCOVERING
+        )
+        campaign.parameters = params
+        campaign.next_run_at = timezone.now()
+        campaign.save(
+            update_fields=["status", "parameters", "next_run_at", "updated_at"]
+        )
+        return campaign
+
+    @transaction.atomic
+    def cancel(self, campaign: SyncCampaign) -> SyncCampaign:
+        campaign = SyncCampaign.objects.select_for_update().get(pk=campaign.pk)
+        if campaign.status not in {
+            SyncCampaign.Status.COMPLETED,
+            SyncCampaign.Status.CANCELLED,
+        }:
+            campaign.status = SyncCampaign.Status.CANCELLED
+            campaign.finished_at = timezone.now()
+            campaign.next_run_at = None
+            campaign.save(
+                update_fields=["status", "finished_at", "next_run_at", "updated_at"]
+            )
+            campaign.work_items.filter(status=SyncWorkItem.Status.RUNNING).update(
+                status=SyncWorkItem.Status.QUEUED,
+                lease_owner="",
+                lease_expires_at=None,
+            )
+        return campaign
 
     @transaction.atomic
     def resume(self, campaign: SyncCampaign) -> SyncCampaign:
@@ -181,6 +310,8 @@ class SyncCampaignService:
             lease_owner="",
             lease_expires_at=None,
             finished_at=None,
+            next_retry_at=None,
+            last_error_code="",
         )
         parameters = campaign.parameters or {}
         discovery = dict(parameters.get("discovery") or {})
@@ -199,12 +330,24 @@ class SyncCampaignService:
         provider = self.provider_for(campaign.provider_slug)
         params = dict(campaign.parameters or {})
         discovery = dict(params.get("discovery") or {})
-        cursor = discovery.get("next_cursor") or "1"
+        default_cursor = "0" if campaign.provider_slug == "bangumi" else "1"
+        cursor = discovery.get("next_cursor") or default_cursor
         page_size = self._positive_int(params.get("page_size"), self.DEFAULT_PAGE_SIZE)
         max_pages = params.get("max_pages")
+        pages_per_step = self._positive_int(
+            params.get("discovery_pages_per_step"),
+            self.DEFAULT_DISCOVERY_PAGES_PER_STEP,
+        )
         pages = 0
-        while cursor:
-            page = provider.discover(cursor=cursor, page_size=page_size)
+        total_pages = int(discovery.get("pages") or 0)
+        while cursor and pages < pages_per_step:
+            if campaign.campaign_type == "incremental" and provider.discover_delta:
+                watermark = str(params.get("watermark") or "0")
+                page = provider.discover_delta(
+                    watermark=watermark, cursor=cursor, page_size=page_size
+                )
+            else:
+                page = provider.discover(cursor=cursor, page_size=page_size)
             page_number = max(1, int(cursor))
             SyncWorkItem.objects.bulk_create(
                 [
@@ -218,7 +361,8 @@ class SyncCampaignService:
                 ignore_conflicts=True,
             )
             discovery["next_cursor"] = page.next_cursor
-            discovery["pages"] = pages + 1
+            total_pages += 1
+            discovery["pages"] = total_pages
             if page.total_count is not None:
                 campaign.total_items = max(campaign.total_items, page.total_count)
             else:
@@ -230,12 +374,21 @@ class SyncCampaignService:
             campaign.save(update_fields=["parameters", "total_items", "updated_at"])
             pages += 1
             cursor = page.next_cursor
-            if max_pages is not None and pages >= self._positive_int(max_pages, pages):
-                return not cursor
+            if max_pages is not None and total_pages >= self._positive_int(
+                max_pages, total_pages
+            ):
+                discovery["truncated"] = bool(cursor)
+                discovery["next_cursor"] = None
+                params["discovery"] = discovery
+                campaign.parameters = params
+                campaign.save(update_fields=["parameters", "updated_at"])
+                return True
         campaign.total_items = SyncWorkItem.objects.filter(campaign=campaign).count()
+        if campaign.campaign_type == "incremental" and not cursor:
+            params["watermark"] = str(int(time.time()))
         campaign.parameters = params
         campaign.save(update_fields=["parameters", "total_items", "updated_at"])
-        return True
+        return not cursor
 
     def _fetch(self, campaign: SyncCampaign, *, max_items: int | None) -> bool:
         provider = self.provider_for(campaign.provider_slug)
@@ -252,11 +405,23 @@ class SyncCampaignService:
         )
         lease_owner = f"campaign:{uuid.uuid4()}"
         lease_expires_at = now + timedelta(seconds=self.WORK_ITEM_LEASE_SECONDS)
-        queryset = SyncWorkItem.objects.filter(
-            campaign=campaign, status=SyncWorkItem.Status.QUEUED
-        ).order_by("shard", "id")
+        queryset = (
+            SyncWorkItem.objects.filter(
+                campaign=campaign,
+                status=SyncWorkItem.Status.QUEUED,
+            )
+            .filter(Q(next_retry_at__isnull=True) | Q(next_retry_at__lte=now))
+            .order_by("shard", "id")
+        )
         if max_items is not None:
             queryset = queryset[: max(0, max_items)]
+        else:
+            queryset = queryset[
+                : self._positive_int(
+                    (campaign.parameters or {}).get("fetch_batch_size"),
+                    self.DEFAULT_FETCH_BATCH_SIZE,
+                )
+            ]
         for item in queryset:
             claimed = SyncWorkItem.objects.filter(
                 pk=item.pk, status=SyncWorkItem.Status.QUEUED
@@ -269,19 +434,22 @@ class SyncCampaignService:
             )
             if claimed != 1:
                 continue
+            item.refresh_from_db()
             try:
                 entity = provider.import_item(item.cursor)
             except ProviderAPIError as exc:
-                self._fail_item(item, exc)
+                self._fail_item(campaign, item, exc)
                 continue
             except Exception as exc:
-                self._fail_item(item, exc)
+                self._fail_item(campaign, item, exc)
                 continue
             SyncWorkItem.objects.filter(pk=item.pk).update(
                 status=SyncWorkItem.Status.SUCCEEDED,
                 result={"entity_id": str(entity.pk), "external_id": item.cursor},
                 finished_at=timezone.now(),
                 error="",
+                last_error_code="",
+                next_retry_at=None,
                 lease_owner="",
                 lease_expires_at=None,
             )
@@ -294,24 +462,51 @@ class SyncCampaignService:
             campaign=campaign, status=SyncWorkItem.Status.FAILED
         ).count()
         campaign.save(update_fields=["failed_items", "updated_at"])
-        if campaign.failed_items:
-            raise RuntimeError(f"{campaign.failed_items} provider work items failed.")
-        return not SyncWorkItem.objects.filter(
-            campaign=campaign, status=SyncWorkItem.Status.QUEUED
-        ).exists()
-
-    def _normalize(self, campaign: SyncCampaign) -> None:
-        if campaign.ai_mode == SyncCampaign.AIMode.OFF:
-            return
-        sample_size = self._positive_int(
-            (campaign.parameters or {}).get("ai_sample_size"),
-            self.DEFAULT_AI_SAMPLE_SIZE,
+        queued = (
+            SyncWorkItem.objects.filter(
+                campaign=campaign,
+                status=SyncWorkItem.Status.QUEUED,
+            )
+            .filter(
+                Q(next_retry_at__isnull=True) | Q(next_retry_at__lte=timezone.now())
+            )
+            .exists()
         )
+        running = SyncWorkItem.objects.filter(
+            campaign=campaign, status=SyncWorkItem.Status.RUNNING
+        ).exists()
+        waiting = SyncWorkItem.objects.filter(
+            campaign=campaign,
+            status=SyncWorkItem.Status.QUEUED,
+            next_retry_at__gt=timezone.now(),
+        ).exists()
+        if not queued and not waiting and not running and campaign.failed_items:
+            raise RuntimeError(
+                f"{campaign.failed_items} provider work items exhausted retries."
+            )
+        return not queued and not waiting and not running
+
+    def _normalize(self, campaign: SyncCampaign) -> bool:
+        if campaign.ai_mode == SyncCampaign.AIMode.OFF:
+            return True
+        parameters = campaign.parameters or {}
+        batch_size = self._positive_int(
+            parameters.get("ai_batch_size"), self.DEFAULT_AI_BATCH_SIZE
+        )
+        configured_limit = parameters.get("ai_sample_size")
+        processed_ai = SyncWorkItem.objects.filter(
+            campaign=campaign, ai_processed_at__isnull=False
+        ).count()
+        if configured_limit is not None and int(configured_limit) > 0:
+            remaining = int(configured_limit) - processed_ai
+            if remaining <= 0:
+                return True
+            batch_size = min(batch_size, remaining)
         items = SyncWorkItem.objects.filter(
             campaign=campaign,
             status=SyncWorkItem.Status.SUCCEEDED,
             ai_processed_at__isnull=True,
-        ).order_by("shard", "id")[:sample_size]
+        ).order_by("shard", "id")[:batch_size]
         for item in items:
             claimed = SyncWorkItem.objects.filter(
                 pk=item.pk,
@@ -324,6 +519,11 @@ class SyncCampaignService:
                 except Exception:
                     SyncWorkItem.objects.filter(pk=item.pk).update(ai_processed_at=None)
                     raise
+        return not SyncWorkItem.objects.filter(
+            campaign=campaign,
+            status=SyncWorkItem.Status.SUCCEEDED,
+            ai_processed_at__isnull=True,
+        ).exists()
 
     def _normalize_item(self, campaign: SyncCampaign, item: SyncWorkItem) -> None:
         result = item.result or {}
@@ -369,6 +569,22 @@ class SyncCampaignService:
             )
 
     @staticmethod
+    def _reconcile_provider_records(campaign: SyncCampaign) -> None:
+        """Mark records absent from a completed full catalog as missing."""
+        if campaign.campaign_type != "full":
+            return
+        discovery = dict((campaign.parameters or {}).get("discovery") or {})
+        if discovery.get("next_cursor") or discovery.get("truncated"):
+            return
+        namespace_slug = PROVIDERS[campaign.provider_slug].namespace_slug
+        seen = SyncWorkItem.objects.filter(campaign=campaign).values("cursor")
+        ProviderRecord.objects.filter(
+            namespace__provider__slug=campaign.provider_slug,
+            namespace__slug=namespace_slug,
+            status=ProviderRecord.Status.ACTIVE,
+        ).exclude(external_id__in=seen).update(status=ProviderRecord.Status.MISSING)
+
+    @staticmethod
     def _taxonomy_values(payload: dict[str, Any]) -> tuple[str, ...]:
         values: list[str] = []
         for value in payload.get("genres") or []:
@@ -394,14 +610,41 @@ class SyncCampaignService:
             "failed_items": failed,
             "ai_mode": campaign.ai_mode,
             "evidence_first": True,
+            "discovery_truncated": bool(
+                (campaign.parameters or {}).get("discovery", {}).get("truncated")
+            ),
         }
         campaign.save(update_fields=["quality_report", "updated_at"])
 
     @staticmethod
-    def _fail_item(item: SyncWorkItem, error: Exception) -> None:
+    def _fail_item(
+        campaign: SyncCampaign, item: SyncWorkItem, error: Exception
+    ) -> None:
+        retryable = bool(getattr(error, "retryable", False))
+        max_attempts = SyncCampaignService._positive_int(
+            (campaign.parameters or {}).get("max_attempts"),
+            SyncCampaignService.DEFAULT_MAX_ATTEMPTS,
+        )
+        message = f"{type(error).__name__}: {error}"[:4000]
+        if retryable and item.attempt < max_attempts:
+            retry_after = getattr(error, "retry_after", None)
+            delay = retry_after or SyncCampaignService.DEFAULT_RETRY_BASE_SECONDS * (
+                2 ** max(0, item.attempt - 1)
+            )
+            SyncWorkItem.objects.filter(pk=item.pk).update(
+                status=SyncWorkItem.Status.QUEUED,
+                error=message,
+                last_error_code=type(error).__name__.lower(),
+                next_retry_at=timezone.now() + timedelta(seconds=min(delay, 3600)),
+                lease_owner="",
+                lease_expires_at=None,
+            )
+            return
         SyncWorkItem.objects.filter(pk=item.pk).update(
             status=SyncWorkItem.Status.FAILED,
-            error=f"{type(error).__name__}: {error}"[:4000],
+            error=message,
+            last_error_code=type(error).__name__.lower(),
+            next_retry_at=None,
             finished_at=timezone.now(),
             lease_owner="",
             lease_expires_at=None,
@@ -415,15 +658,16 @@ class SyncCampaignService:
     def _fail(campaign: SyncCampaign, error: Exception) -> None:
         campaign.refresh_from_db()
         if campaign.status not in {
+            SyncCampaign.Status.PAUSED,
             SyncCampaign.Status.COMPLETED,
             SyncCampaign.Status.CANCELLED,
             SyncCampaign.Status.FAILED,
         }:
             SyncCampaignStateMachine(campaign).advance(SyncCampaign.Status.FAILED)
-        SyncCampaign.objects.filter(pk=campaign.pk).update(
-            error=f"{type(error).__name__}: {error}"[:4000],
-            finished_at=timezone.now(),
-        )
+        updates = {"error": f"{type(error).__name__}: {error}"[:4000]}
+        if campaign.status != SyncCampaign.Status.PAUSED:
+            updates["finished_at"] = timezone.now()
+        SyncCampaign.objects.filter(pk=campaign.pk).update(**updates)
 
     @staticmethod
     def _transition(campaign: SyncCampaign, next_status: str) -> bool:

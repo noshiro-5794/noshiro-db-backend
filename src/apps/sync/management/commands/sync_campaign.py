@@ -19,7 +19,12 @@ class Command(BaseCommand):
         )
         parser.add_argument("--idempotency-key", default="")
         parser.add_argument("--page-size", type=int, default=100)
-        parser.add_argument("--ai-sample-size", type=int, default=16)
+        parser.add_argument(
+            "--ai-sample-size",
+            type=int,
+            default=0,
+            help="Optional cap for AI processing; zero processes every successful item.",
+        )
         parser.add_argument("--max-items", type=int)
 
     def handle(self, *args, **options):

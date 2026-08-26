@@ -7,10 +7,11 @@ from apps.index.models import Provider, ProviderNamespace
 from apps.sync.providers.contracts import (
     CatalogPage,
     CatalogSourceSpec,
+    DeltaPage,
     SourceNamespaceSpec,
 )
 from apps.sync.providers.exceptions import AniListAPIError
-from apps.sync.providers.rate_limiter import RateLimiter
+from apps.sync.providers.rate_limiter import DistributedRateLimiter
 from shared.outbound import httpx_client_kwargs
 
 ANILIST_SOURCE = CatalogSourceSpec(
@@ -79,6 +80,17 @@ class AniListClient:
       }
     }
     """
+    DELTA_QUERY = """
+    query ($page: Int!, $perPage: Int!, $updatedAfter: Int!) {
+      Page(page: $page, perPage: $perPage) {
+        pageInfo { hasNextPage }
+        media(type: ANIME, sort: UPDATED_AT_DESC, updatedAt_greater: $updatedAfter) {
+          id
+          updatedAt
+        }
+      }
+    }
+    """
     MEDIA_QUERY = """
     query ($id: Int, $page: Int, $perPage: Int) {
       Media(id: $id, type: ANIME) {
@@ -124,7 +136,11 @@ class AniListClient:
 
     def __init__(self, client: httpx.Client | None = None) -> None:
         self._client = client
-        self._rate_limiter = RateLimiter(settings.ANILIST_RATE_LIMIT_INTERVAL)
+        self._rate_limiter = DistributedRateLimiter(
+            "anilist",
+            settings.ANILIST_RATE_LIMIT_INTERVAL,
+            allow_fallback=client is not None,
+        )
 
     @property
     def client(self) -> httpx.Client:
@@ -167,7 +183,9 @@ class AniListClient:
         except httpx.HTTPStatusError as exc:
             raise AniListAPIError(
                 f"AniList returned HTTP {exc.response.status_code}: "
-                f"{exc.response.text[:500]}"
+                f"{exc.response.text[:500]}",
+                status_code=exc.response.status_code,
+                retry_after=_retry_after(exc.response),
             ) from exc
         except httpx.RequestError as exc:
             raise AniListAPIError(f"AniList request failed: {exc}") from exc
@@ -178,7 +196,15 @@ class AniListClient:
             raise AniListAPIError("AniList returned an invalid GraphQL response.")
         if errors := payload.get("errors"):
             detail = str(errors[0] if isinstance(errors, list) else errors)[:500]
-            raise AniListAPIError(f"AniList GraphQL error: {detail}")
+            retryable = any(
+                isinstance(error, dict)
+                and error.get("extensions", {}).get("code")
+                in {"RATE_LIMITED", "INTERNAL_SERVER_ERROR"}
+                for error in (errors if isinstance(errors, list) else [errors])
+            )
+            error = AniListAPIError(f"AniList GraphQL error: {detail}")
+            error.retryable = retryable
+            raise error
         return payload["data"]
 
     def fetch_media(
@@ -225,6 +251,44 @@ class AniListClient:
             ),
         )
 
+    def discover_anime_delta_page(
+        self,
+        *,
+        watermark: str,
+        cursor: str | None = None,
+        page_size: int = 50,
+    ) -> DeltaPage:
+        try:
+            updated_after = int(watermark)
+        except (TypeError, ValueError) as exc:
+            raise AniListAPIError(
+                "AniList delta watermark must be a Unix timestamp."
+            ) from exc
+        page = max(1, int(cursor or "1"))
+        data = self._post(
+            self.DELTA_QUERY,
+            {
+                "page": page,
+                "perPage": min(max(page_size, 1), 50),
+                "updatedAfter": updated_after,
+            },
+        )
+        page_data = data.get("Page")
+        if not isinstance(page_data, dict):
+            raise AniListAPIError("AniList returned an invalid delta page.")
+        items = page_data.get("media") or []
+        external_ids = tuple(
+            str(item["id"])
+            for item in items
+            if isinstance(item, dict) and isinstance(item.get("id"), int)
+        )
+        page_info = page_data.get("pageInfo") or {}
+        return DeltaPage(
+            external_ids=external_ids,
+            next_cursor=str(page + 1) if page_info.get("hasNextPage") else None,
+            watermark=str(updated_after),
+        )
+
     def close(self) -> None:
         if self._client is not None:
             self._client.close()
@@ -232,3 +296,13 @@ class AniListClient:
 
 
 anilist_client = AniListClient()
+
+
+def _retry_after(response: httpx.Response) -> float | None:
+    value = response.headers.get("retry-after")
+    if value is None:
+        return None
+    try:
+        return max(0.0, float(value))
+    except ValueError:
+        return None

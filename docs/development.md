@@ -69,6 +69,36 @@ and parameters. Provider discovery and canonical imports remain deterministic;
 when the configured AI contract cannot produce a usable result. AI never writes a
 canonical field directly.
 
+Campaign execution is bounded. Discovery stores its provider cursor in
+`parameters.discovery.next_cursor`; fetching and AI normalization process bounded
+batches and the Celery task schedules the next step. Admin monitoring and controls
+are exposed through:
+
+```text
+GET  /api/v1/operations/sync/
+POST /api/v1/operations/sync/
+GET  /api/v1/operations/sync/{campaign_id}/
+GET  /api/v1/operations/sync/{campaign_id}/items/
+POST /api/v1/operations/sync/{campaign_id}/pause/
+POST /api/v1/operations/sync/{campaign_id}/resume/
+POST /api/v1/operations/sync/{campaign_id}/cancel/
+```
+
+`full` campaigns enumerate a provider catalog. `incremental` campaigns use the
+AniList `updatedAt_greater` watermark when available. A provider without a
+reliable delta feed must use periodic catalog reconciliation and compare stored
+payload hashes; it must not guess an update frontier from numeric IDs.
+
+Production provider clients share a Redis-backed per-provider interval limiter.
+429, 5xx, and transport failures carry retry metadata and use bounded exponential
+backoff; validation and not-found errors are terminal. The in-process limiter is
+only a local-development fallback when Redis is unavailable.
+
+The default AI normalization mode processes every successful item in bounded
+batches. `--ai-sample-size N` is an explicit shadow experiment cap. AI output is
+an evidence-backed claim/proposal tied to an observation and cannot directly
+overwrite canonical projections.
+
 ## API Contract
 
 The only REST root is `/api/v1/`. OpenAPI is available at `/api/v1/openapi/` and its
