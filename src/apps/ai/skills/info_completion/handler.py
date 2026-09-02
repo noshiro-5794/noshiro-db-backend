@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import re
 from typing import Any
 
@@ -34,15 +35,34 @@ SKILL_NAME = "info_completion"
 SKILL_VERSION = "1.0.0"
 PROMPT_VERSION = "info-completion-v1"
 USE_CASE = "info_completion"
+logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """You complete missing multilingual metadata for an ACG entity.
 Use only the supplied entity facts and web evidence. Never invent a title or
 description without support; prefer abstain when uncertain. Titles must be
-verbatim from evidence when available. Return JSON matching the supplied
-schema with per-field confidence and a short reason citing the evidence.
+verbatim from evidence when available.
+
+Respond with ONLY a JSON object of the form:
+{"strategy": "complete", "proposals": [
+  {"field": "title", "language": "zh", "script": "", "text": "译名",
+   "kind": "translated", "confidence": 0.9,
+   "reason": "short evidence citation", "source": "model"}
+], "summary": "one sentence"}
+Choose "abstain" with an empty proposals list when evidence is insufficient.
 """
 
 _NORMALIZE_RE = re.compile(r"[\s\u3000]+")
+
+
+def _schema_prompt() -> str:
+    return (
+        SYSTEM_PROMPT
+        + "\nOutput must validate against this JSON schema:\n"
+        + json.dumps(
+            InfoCompletionOutput.model_json_schema(),
+            ensure_ascii=False,
+        )
+    )
 
 
 class InfoCompletionSkill:
@@ -224,23 +244,36 @@ class InfoCompletionSkill:
             status=AIRun.Status.RUNNING,
             started_at=timezone.now(),
         )
+        usage: dict[str, Any] = {}
+        result: InfoCompletionOutput | None = None
         try:
             output, usage = ai_gateway.complete_json(
-                system_prompt=SYSTEM_PROMPT,
+                system_prompt=_schema_prompt(),
                 payload=payload,
                 use_case=USE_CASE,
             )
             result = InfoCompletionOutput.model_validate(output)
-        except Exception as exc:
-            ai_run.status = AIRun.Status.FAILED
-            ai_run.error = f"{type(exc).__name__}: {exc}"[:4000]
-            ai_run.finished_at = timezone.now()
-            ai_run.save(update_fields=["status", "error", "finished_at"])
-            step.error = "Model unavailable or returned an invalid contract."
-            step.status = AgentStep.Status.FAILED
-            step.finished_at = timezone.now()
-            step.save(update_fields=["status", "error", "finished_at"])
-            raise
+        except Exception as first_error:
+            retried = self._retry_with_contract(payload=payload)
+            if retried is not None:
+                result, usage = retried
+            else:
+                ai_run.status = AIRun.Status.FAILED
+                ai_run.error = f"{type(first_error).__name__}: {first_error}"[:4000]
+                ai_run.finished_at = timezone.now()
+                ai_run.save(update_fields=["status", "error", "finished_at"])
+                step.error = "Model output did not match the enrichment contract."
+                step.status = AgentStep.Status.FAILED
+                step.finished_at = timezone.now()
+                step.save(update_fields=["status", "error", "finished_at"])
+                return (
+                    InfoCompletionOutput(
+                        strategy="abstain",
+                        proposals=[],
+                        summary="Model output did not match the enrichment contract.",
+                    ),
+                    ai_run,
+                )
 
         ai_run.output = result.model_dump(mode="json")
         ai_run.status = AIRun.Status.SUCCEEDED
@@ -259,6 +292,38 @@ class InfoCompletionSkill:
             ]
         )
         return result, ai_run
+
+    def _retry_with_contract(
+        self,
+        *,
+        payload: dict[str, Any],
+    ) -> tuple[InfoCompletionOutput, dict[str, Any]] | None:
+        """Retry once with an explicit contract example after a schema miss."""
+        retry_prompt = (
+            _schema_prompt()
+            + "\nYour previous response did not match. Return exactly:\n"
+            + json.dumps(
+                {
+                    "strategy": "complete",
+                    "proposals": [],
+                    "summary": "Retry with schema-compliant output.",
+                },
+                ensure_ascii=False,
+            )
+            + "\nwith your real proposals filled in."
+        )
+        try:
+            output, usage = ai_gateway.complete_json(
+                system_prompt=retry_prompt,
+                payload=payload,
+                use_case=USE_CASE,
+            )
+            return InfoCompletionOutput.model_validate(output), usage
+        except Exception:
+            logger.exception(
+                "Enrichment model retry failed after contract mismatch",
+            )
+            return None
 
     @staticmethod
     def _acceptable_proposal(

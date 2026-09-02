@@ -241,6 +241,58 @@ def test_abstain_persists_no_claims() -> None:
     assert AIClaim.objects.count() == 0
 
 
+def test_schema_mismatch_retries_then_succeeds() -> None:
+    entity, observation, run = _fixture()
+    malformed = {
+        "title:zh": {
+            "value": None,
+            "confidence": 0.0,
+            "reason": "Unable to determine the title.",
+        }
+    }
+
+    with patch(
+        "apps.ai.skills.info_completion.handler.ai_gateway.complete_json",
+        side_effect=[(malformed, {}), (_model_output(), {})],
+    ):
+        summary = info_completion_skill.complete(
+            _input(entity),
+            target_entity=entity,
+            agent_run=run,
+            source_observation=observation,
+            apply=False,
+        )
+
+    assert summary["claims"] == 1
+    assert AIClaim.objects.count() == 1
+
+
+def test_schema_mismatch_retry_failure_abstains_without_raising() -> None:
+    entity, observation, run = _fixture()
+    malformed = {
+        "title:zh": {
+            "value": None,
+            "confidence": 0.0,
+            "reason": "Unable to determine the title.",
+        }
+    }
+
+    with patch(
+        "apps.ai.skills.info_completion.handler.ai_gateway.complete_json",
+        side_effect=[(malformed, {}), (malformed, {})],
+    ):
+        summary = info_completion_skill.complete(
+            _input(entity),
+            target_entity=entity,
+            agent_run=run,
+            source_observation=observation,
+        )
+
+    assert summary["abstained"] == 1
+    assert summary["claims"] == 0
+    assert AIClaim.objects.count() == 0
+
+
 @override_settings(
     WEB_SEARCH_PROVIDER="tavily",
     WEB_SEARCH_API_KEY="test-key",
