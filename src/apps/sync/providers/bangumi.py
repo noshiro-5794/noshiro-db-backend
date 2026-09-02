@@ -183,17 +183,13 @@ class BangumiClient:
             items = payload
             total_count = None
         else:
-            raise BangumiAPIError(
-                "Bangumi subjects response must contain a data list."
-            )
+            raise BangumiAPIError("Bangumi subjects response must contain a data list.")
         external_ids = tuple(
             str(item["id"])
             for item in items
             if isinstance(item, dict) and isinstance(item.get("id"), int)
         )
-        parsed_total = (
-            int(total_count) if isinstance(total_count, (int, str)) else None
-        )
+        parsed_total = int(total_count) if isinstance(total_count, (int, str)) else None
         next_cursor: str | None
         if len(external_ids) == limit and offset + limit < BANGUMI_BROWSE_MAX_OFFSET:
             next_cursor = f"{type_id}:{offset + limit}"
