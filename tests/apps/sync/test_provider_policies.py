@@ -283,3 +283,24 @@ def test_truncated_incremental_never_promotes_watermark() -> None:
         "pending_watermark": "1700000000",
     }
     assert campaign.save_calls == []
+
+
+@pytest.mark.django_db
+def test_review_marks_agent_run_complete() -> None:
+    from apps.ai.models import AgentRun
+
+    run = AgentRun.objects.create(
+        kind=AgentRun.Kind.ADMIN_SYNC,
+        title="campaign",
+        idempotency_key="k",
+        idempotency_scope="sync:test",
+    )
+
+    class FakeCampaign:
+        agent_run_id = run.pk
+
+    SyncCampaignService._mark_agent_run_complete(FakeCampaign())
+
+    run.refresh_from_db()
+    assert run.status == AgentRun.Status.SUCCEEDED
+    assert run.finished_at is not None

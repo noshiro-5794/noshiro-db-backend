@@ -22,7 +22,7 @@ from django.db import transaction
 from django.db.models import F, Q
 from django.utils import timezone
 
-from apps.ai.models import AIClaim
+from apps.ai.models import AgentRun, AIClaim
 from apps.index.models import (
     Entity,
     Observation,
@@ -227,6 +227,7 @@ class SyncCampaignService:
             if campaign.status == SyncCampaign.Status.REVIEWING:
                 self._write_quality_report(campaign)
                 self._promote_watermark(campaign)
+                self._mark_agent_run_complete(campaign)
                 self._transition_required(campaign, SyncCampaign.Status.COMPLETED)
         except Exception as exc:
             logger.exception(
@@ -815,6 +816,16 @@ class SyncCampaignService:
         parameters["watermark"] = pending
         campaign.parameters = parameters
         campaign.save(update_fields=["parameters", "updated_at"])
+
+    @staticmethod
+    def _mark_agent_run_complete(campaign: SyncCampaign) -> None:
+        """Close the campaign's agent run when direct skill calls finish."""
+        if campaign.agent_run_id is None:
+            return
+        AgentRun.objects.filter(
+            pk=campaign.agent_run_id,
+            status__in={AgentRun.Status.QUEUED, AgentRun.Status.RUNNING},
+        ).update(status=AgentRun.Status.SUCCEEDED, finished_at=timezone.now())
 
     @staticmethod
     def _skip_item(
