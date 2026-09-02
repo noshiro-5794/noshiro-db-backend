@@ -25,7 +25,7 @@ class CalendarImageService:
                 **httpx_client_kwargs(
                     headers={"User-Agent": settings.BANGUMI_USER_AGENT},
                     timeout=settings.BANGUMI_TIMEOUT,
-                    follow_redirects=False,
+                    follow_redirects=True,
                 )
             )
         return self._client
