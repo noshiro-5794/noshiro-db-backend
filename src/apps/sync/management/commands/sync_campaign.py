@@ -11,7 +11,12 @@ class Command(BaseCommand):
     help = "Run a durable provider-wide sync campaign."
 
     def add_arguments(self, parser):
-        parser.add_argument("provider", choices=("vndb", "anilist"))
+        parser.add_argument("provider", choices=("vndb", "anilist", "bangumi"))
+        parser.add_argument(
+            "--campaign-type",
+            choices=("full", "incremental"),
+            default="full",
+        )
         parser.add_argument(
             "--ai-mode",
             choices=[value for value, _ in SyncCampaign.AIMode.choices],
@@ -29,19 +34,20 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         provider = options["provider"]
+        campaign_type = options["campaign_type"]
         parameters = {
             "page_size": options["page_size"],
             "ai_sample_size": options["ai_sample_size"],
         }
         key = options["idempotency_key"] or campaign_idempotency_key(
             provider_slug=provider,
-            campaign_type="full",
+            campaign_type=campaign_type,
             parameters=parameters,
         )
         try:
             campaign = sync_campaign_service.create_campaign(
                 provider_slug=provider,
-                campaign_type="full",
+                campaign_type=campaign_type,
                 ai_mode=options["ai_mode"],
                 parameters=parameters,
                 idempotency_key=key,

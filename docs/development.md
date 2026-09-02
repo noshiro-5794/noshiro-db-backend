@@ -92,6 +92,48 @@ items, and pending AI claims. `GET /operations/sync/{id}/claims/` paginates the
 AI decision trail (claims with model/calibrated confidence, policy decision,
 and linked observation/web evidence) for admin review.
 
+### Provider onboarding and bounded smoke campaigns
+
+Providers are registered idempotently with **explicit** usage policies; the
+command dry-runs by default:
+
+```text
+python src/manage.py provider_onboard vndb \
+  --policy storage=allowed \
+  --policy redistribution=restricted \
+  --policy commercial_use=restricted \
+  --policy ai_usage=restricted \
+  --terms-checked --enable --apply
+```
+
+Policy fields are `storage`, `redistribution`, `commercial_use`, `ai_usage`
+with values `unknown|allowed|restricted|forbidden`. Re-running with the same
+policies is a no-op. Before onboarding VNDB, confirm its ODbL terms and your
+redistribution/AI-use position; the command will not guess policies for you.
+
+After onboarding, verify with a **bounded** smoke campaign before any full run.
+The CLI runs one durable step synchronously; repeated invocations with the same
+idempotency key continue the same campaign:
+
+```text
+# VNDB full, no AI, bounded to a handful of imports per step.
+python src/manage.py sync_campaign vndb \
+  --ai-mode off --max-items 5 --idempotency-key smoke-vndb-1
+
+# AniList true-delta incremental, bounded discovery pages.
+python src/manage.py sync_campaign anilist \
+  --campaign-type incremental --ai-mode off \
+  --idempotency-key smoke-anilist-delta-1
+```
+
+Campaigns created through the admin API (`POST /operations/sync/`) are executed
+asynchronously by the sync worker and auto-schedule until they reach a terminal
+state; monitor them with `GET /operations/sync/summary/` and
+`GET /operations/sync/{id}/items/`. AI phases require `AI_AGENT_API_KEY`;
+enrichment additionally benefits from `WEB_SEARCH_API_KEY`. Use `--ai-mode off`
+for deterministic smoke tests, then re-run with `shadow` to collect reviewable
+claims before enabling auto-apply.
+
 `full` campaigns enumerate a provider catalog. `incremental` campaigns use the
 AniList `updatedAt_greater` watermark when available. A provider without a
 reliable delta feed must use periodic catalog reconciliation and compare stored
