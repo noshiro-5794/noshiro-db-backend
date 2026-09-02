@@ -414,6 +414,26 @@ AI_EMBEDDING_MODEL = env(
 
 AI_AGENT_TIMEOUT = env.float("AI_AGENT_TIMEOUT", default=30)
 
+# Web evidence for AI enrichment. WEB_SEARCH_PROVIDER is one of "tavily",
+# "none"; without a key the harness degrades to model-only evidence.
+WEB_SEARCH_PROVIDER = env("WEB_SEARCH_PROVIDER", default="none")
+WEB_SEARCH_API_KEY = env("WEB_SEARCH_API_KEY", default=None)
+WEB_SEARCH_BASE_URL = env(
+    "WEB_SEARCH_BASE_URL",
+    default="https://api.tavily.com",
+)
+WEB_SEARCH_TIMEOUT = env.float("WEB_SEARCH_TIMEOUT", default=20)
+WEB_FETCH_TIMEOUT = env.float("WEB_FETCH_TIMEOUT", default=20)
+WEB_FETCH_MAX_BYTES = env.int("WEB_FETCH_MAX_BYTES", default=65536)
+
+# Bounded AI enrichment policy. Enrichment never runs on the full catalog; the
+# sample cap and batch size bound per-campaign spend. Auto-apply is off by
+# default: results are persisted as reviewable AIClaim evidence first.
+AI_ENRICH_MIN_CONFIDENCE = env.float("AI_ENRICH_MIN_CONFIDENCE", default=0.85)
+AI_ENRICH_SAMPLE_SIZE = env.int("AI_ENRICH_SAMPLE_SIZE", default=200)
+AI_ENRICH_APPLY = env.bool("AI_ENRICH_APPLY", default=False)
+AI_ENRICH_LANGUAGES = env_list("AI_ENRICH_LANGUAGES", default=("zh", "ja", "en"))
+
 OUTBOUND_PROXY_URL = env("OUTBOUND_PROXY_URL", default=None)
 
 OUTBOUND_NO_PROXY_HOSTS = env_list("OUTBOUND_NO_PROXY_HOSTS")

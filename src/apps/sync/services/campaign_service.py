@@ -17,10 +17,12 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any
 
+from django.conf import settings
 from django.db import transaction
 from django.db.models import F, Q
 from django.utils import timezone
 
+from apps.ai.models import AIClaim
 from apps.index.models import (
     Entity,
     Observation,
@@ -217,6 +219,8 @@ class SyncCampaignService:
                     campaign, SyncCampaign.Status.ENRICHING
                 )
             if campaign.status == SyncCampaign.Status.ENRICHING:
+                if not self._enrich(campaign):
+                    return SyncCampaign.objects.get(pk=campaign.pk)
                 campaign = self._transition_required(
                     campaign, SyncCampaign.Status.REVIEWING
                 )
@@ -612,6 +616,120 @@ class SyncCampaignService:
                 field_context={"provider": campaign.provider_slug},
             )
 
+    def _enrich(self, campaign: SyncCampaign) -> bool:
+        """Run one bounded AI enrichment step for a sampled subset of items."""
+        if campaign.ai_mode == SyncCampaign.AIMode.OFF:
+            return True
+        params = dict(campaign.parameters or {})
+        batch_size = self._positive_int(
+            params.get("ai_batch_size"), self.DEFAULT_AI_BATCH_SIZE
+        )
+        sample = params.get("enrich_sample_size")
+        if sample is None:
+            sample = settings.AI_ENRICH_SAMPLE_SIZE
+        sample = int(sample)
+        processed = SyncWorkItem.objects.filter(
+            campaign=campaign, ai_enriched_at__isnull=False
+        ).count()
+        if sample > 0:
+            remaining = sample - processed
+            if remaining <= 0:
+                return True
+            batch_size = min(batch_size, remaining)
+        items = SyncWorkItem.objects.filter(
+            campaign=campaign,
+            status=SyncWorkItem.Status.SUCCEEDED,
+            ai_enriched_at__isnull=True,
+        ).order_by("shard", "id")[:batch_size]
+        stats = dict(
+            params.get("enrichment")
+            or {"claims": 0, "applied": 0, "abstained": 0, "skipped": 0}
+        )
+        apply = bool(params.get("enrich_apply", settings.AI_ENRICH_APPLY))
+        min_confidence = float(
+            params.get("enrich_min_confidence", settings.AI_ENRICH_MIN_CONFIDENCE)
+        )
+        languages = tuple(
+            params.get("enrich_languages") or settings.AI_ENRICH_LANGUAGES
+        )
+        for item in items:
+            claimed = SyncWorkItem.objects.filter(
+                pk=item.pk,
+                status=SyncWorkItem.Status.SUCCEEDED,
+                ai_enriched_at__isnull=True,
+            ).update(ai_enriched_at=timezone.now())
+            if claimed != 1:
+                continue
+            try:
+                result = self._enrich_item(
+                    campaign,
+                    item,
+                    apply=apply,
+                    min_confidence=min_confidence,
+                    languages=languages,
+                )
+            except Exception:
+                SyncWorkItem.objects.filter(pk=item.pk).update(ai_enriched_at=None)
+                raise
+            for key in ("claims", "applied", "abstained", "skipped"):
+                stats[key] = stats.get(key, 0) + int(result.get(key, 0))
+            params["enrichment"] = stats
+            campaign.parameters = params
+            campaign.save(update_fields=["parameters", "updated_at"])
+        return not SyncWorkItem.objects.filter(
+            campaign=campaign,
+            status=SyncWorkItem.Status.SUCCEEDED,
+            ai_enriched_at__isnull=True,
+        ).exists()
+
+    def _enrich_item(
+        self,
+        campaign: SyncCampaign,
+        item: SyncWorkItem,
+        *,
+        apply: bool,
+        min_confidence: float,
+        languages: tuple[str, ...],
+    ) -> dict:
+        result = item.result or {}
+        entity_id = result.get("entity_id")
+        if not entity_id:
+            return {"claims": 0, "applied": 0, "abstained": 0, "skipped": 1}
+        record = (
+            ProviderRecord.objects.filter(
+                namespace__provider__slug=campaign.provider_slug,
+                namespace__slug=self.provider_for(
+                    campaign.provider_slug
+                ).namespace_slug,
+                external_id=item.cursor,
+            )
+            .select_related("namespace")
+            .first()
+        )
+        entity = Entity.objects.filter(pk=entity_id).first()
+        if record is None or entity is None:
+            return {"claims": 0, "applied": 0, "abstained": 0, "skipped": 1}
+        observation = (
+            Observation.objects.filter(provider_record=record)
+            .order_by("-observed_at")
+            .first()
+        )
+        representation_exists = ProviderRepresentation.objects.filter(
+            provider_record=record, entity=entity, is_active=True
+        ).exists()
+        if observation is None or not representation_exists:
+            return {"claims": 0, "applied": 0, "abstained": 0, "skipped": 1}
+        return sync_ai_service.enrich_entity(
+            context=SyncAIContext(
+                campaign=campaign,
+                entity=entity,
+                observation=observation,
+            ),
+            apply=apply,
+            min_confidence=min_confidence,
+            target_languages=languages,
+        )
+
     @staticmethod
     def _reconcile_provider_records(campaign: SyncCampaign) -> None:
         """Mark records absent from a completed full catalog as missing."""
@@ -660,6 +778,13 @@ class SyncCampaignService:
         failed = SyncWorkItem.objects.filter(
             campaign=campaign, status=SyncWorkItem.Status.FAILED
         ).count()
+        params = campaign.parameters or {}
+        pending_claims = 0
+        if campaign.agent_run_id:
+            pending_claims = AIClaim.objects.filter(
+                step__run_id=campaign.agent_run_id,
+                status=AIClaim.Status.PROPOSED,
+            ).count()
         campaign.quality_report = {
             "total_items": campaign.total_items,
             "succeeded_items": succeeded,
@@ -667,6 +792,9 @@ class SyncCampaignService:
             "skipped_items": campaign.skipped_items,
             "ai_mode": campaign.ai_mode,
             "evidence_first": True,
+            "ai_enrichment": params.get("enrichment")
+            or {"claims": 0, "applied": 0, "abstained": 0, "skipped": 0},
+            "ai_claims_pending_review": pending_claims,
             "discovery_truncated": bool(
                 (campaign.parameters or {}).get("discovery", {}).get("truncated")
             ),

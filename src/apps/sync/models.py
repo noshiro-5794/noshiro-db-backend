@@ -230,6 +230,7 @@ class SyncWorkItem(models.Model):
     lease_owner = models.CharField(max_length=128, blank=True)
     lease_expires_at = models.DateTimeField(null=True, blank=True)
     ai_processed_at = models.DateTimeField(null=True, blank=True)
+    ai_enriched_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     started_at = models.DateTimeField(null=True, blank=True)
     finished_at = models.DateTimeField(null=True, blank=True)

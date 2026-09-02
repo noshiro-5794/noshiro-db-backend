@@ -13,6 +13,11 @@ from apps.ai.skills.field_normalization import (
     FieldNormalizationOutput,
     field_normalization_skill,
 )
+from apps.ai.skills.info_completion import (
+    InfoCompletionInput,
+    info_completion_skill,
+)
+from apps.index.models import EntityDescription, EntityName
 from apps.sync.exceptions import SyncAIRequiredError
 from apps.sync.models import SyncCampaign
 
@@ -101,6 +106,79 @@ class SyncAIService:
                 "Required AI normalization did not produce a model or alias result."
             )
         return result
+
+    def enrich_entity(
+        self,
+        *,
+        context: SyncAIContext,
+        apply: bool = False,
+        min_confidence: float = 0.85,
+        target_languages: tuple[str, ...] = ("zh", "ja", "en"),
+    ) -> dict:
+        """Complete missing multilingual fields for one entity (bounded pass).
+
+        The skill persists ``AIClaim``/``ClaimEvidence`` records for every
+        proposal; entity names are only auto-applied when ``apply`` is enabled
+        and the calibrated confidence clears the threshold. Descriptions are
+        always kept as reviewable claims.
+        """
+        if not context.enabled:
+            return {"claims": 0, "applied": 0, "abstained": 0, "strategy": "skipped"}
+        entity = context.entity
+        names = {
+            name.language: name.text
+            for name in EntityName.objects.filter(entity=entity)
+            if name.language
+        }
+        description_languages = set(
+            EntityDescription.objects.filter(entity=entity).values_list(
+                "language", flat=True
+            )
+        )
+        missing_fields = [
+            f"title:{lang}" for lang in target_languages if lang not in names
+        ] + [
+            f"description:{lang}"
+            for lang in target_languages
+            if lang not in description_languages
+        ]
+        if not missing_fields:
+            return {"claims": 0, "applied": 0, "abstained": 0, "strategy": "skipped"}
+
+        normalized = {}
+        if context.observation is not None:
+            normalized = context.observation.normalized_data or {}
+        original_name = str(normalized.get("title") or "")
+        preferred_name = str(normalized.get("title_cn") or "")
+        if not preferred_name:
+            preferred_name = next(iter(names.values()), "")
+        release_date = str(normalized.get("date") or "")
+        provider = context.campaign.provider_slug
+        external_id = (
+            context.observation.provider_record.external_id
+            if context.observation is not None
+            else ""
+        )
+        run = self.ensure_agent_run(context.campaign)
+        value = InfoCompletionInput(
+            entity_id=str(entity.pk),
+            provider=provider,
+            external_id=external_id,
+            preferred_name=preferred_name,
+            original_name=original_name,
+            source_language="",
+            release_date=release_date,
+            missing_fields=missing_fields,
+            existing_names=names,
+        )
+        return info_completion_skill.complete(
+            value,
+            target_entity=entity,
+            agent_run=run,
+            source_observation=context.observation,
+            apply=apply,
+            min_confidence=min_confidence,
+        )
 
 
 sync_ai_service = SyncAIService()

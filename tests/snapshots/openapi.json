@@ -5232,6 +5232,46 @@
                 }
             }
         },
+        "/api/v1/operations/sync/{campaign_id}/claims/": {
+            "get": {
+                "operationId": "get_api_v1_operations_sync_by_campaign_id_claims",
+                "description": "Paginated AI claims produced for one campaign (admin decision display).",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "campaign_id",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "v1"
+                ],
+                "security": [
+                    {
+                        "jwtAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/AIClaim"
+                                    }
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
         "/api/v1/operations/sync/{campaign_id}/items/": {
             "get": {
                 "operationId": "get_api_v1_operations_sync_by_campaign_id_items",
@@ -5267,6 +5307,25 @@
                             }
                         },
                         "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v1/operations/sync/summary/": {
+            "get": {
+                "operationId": "get_api_v1_operations_sync_summary",
+                "description": "Operational summary for monitoring all sync campaigns.",
+                "tags": [
+                    "v1"
+                ],
+                "security": [
+                    {
+                        "jwtAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "No response body"
                     }
                 }
             }
@@ -9236,6 +9295,86 @@
     },
     "components": {
         "schemas": {
+            "AIClaim": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "readOnly": true
+                    },
+                    "claim_type": {
+                        "type": "string",
+                        "maxLength": 64
+                    },
+                    "predicate_slug": {
+                        "type": "string",
+                        "maxLength": 128
+                    },
+                    "proposed_value": {},
+                    "model_confidence": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,1}(?:\\.\\d{0,4})?$"
+                    },
+                    "evidence_strength": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,1}(?:\\.\\d{0,4})?$"
+                    },
+                    "calibrated_confidence": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,1}(?:\\.\\d{0,4})?$",
+                        "nullable": true
+                    },
+                    "status": {
+                        "$ref": "#/components/schemas/AIClaimStatusEnum"
+                    },
+                    "policy_decision": {
+                        "type": "string",
+                        "maxLength": 64
+                    },
+                    "policy_reason": {
+                        "type": "string"
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    },
+                    "decided_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "evidence": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ClaimEvidence"
+                        },
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "claim_type",
+                    "created_at",
+                    "evidence",
+                    "id",
+                    "model_confidence",
+                    "proposed_value"
+                ]
+            },
+            "AIClaimStatusEnum": {
+                "enum": [
+                    "proposed",
+                    "accepted",
+                    "rejected",
+                    "superseded"
+                ],
+                "type": "string",
+                "description": "* `proposed` - Proposed\n* `accepted` - Accepted\n* `rejected` - Rejected\n* `superseded` - Superseded"
+            },
             "Accepted": {
                 "type": "object",
                 "properties": {
@@ -9790,6 +9929,42 @@
                 ],
                 "type": "string",
                 "description": "* `full` - full\n* `incremental` - incremental"
+            },
+            "ClaimEvidence": {
+                "type": "object",
+                "properties": {
+                    "locator": {
+                        "type": "string",
+                        "maxLength": 512
+                    },
+                    "excerpt": {
+                        "type": "string"
+                    },
+                    "excerpt_hash": {
+                        "type": "string",
+                        "maxLength": 64
+                    },
+                    "relevance": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,1}(?:\\.\\d{0,4})?$"
+                    },
+                    "source_url": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "observation": {
+                        "type": "string",
+                        "format": "uuid",
+                        "readOnly": true,
+                        "nullable": true
+                    }
+                },
+                "required": [
+                    "locator",
+                    "observation",
+                    "source_url"
+                ]
             },
             "CodeLogin": {
                 "type": "object",
@@ -13416,6 +13591,11 @@
                         "maxLength": 64
                     },
                     "ai_processed_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "ai_enriched_at": {
                         "type": "string",
                         "format": "date-time",
                         "nullable": true

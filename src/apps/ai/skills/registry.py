@@ -68,7 +68,9 @@ skill_registry = SkillRegistry()
 def create_default_skill_registry() -> SkillRegistry:
     """Build the registry of shipped skills without import-time side effects."""
     from .field_normalization.handler import field_normalization_skill
+    from .info_completion.handler import info_completion_skill
 
     registry = SkillRegistry()
     registry.register(field_normalization_skill.definition)
+    registry.register(info_completion_skill.definition)
     return registry

@@ -20,6 +20,7 @@ from apps.ai.models import (
     ToolInvocation,
 )
 from apps.ai.skills.registry import create_default_skill_registry
+from apps.ai.tools.evidence import capture_artifact
 from apps.ai.tools.registry import create_default_tool_registry
 from integrations.ai.gateway import ai_gateway
 
@@ -292,18 +293,12 @@ class StepExecutor:
         invocation.finished_at = timezone.now()
         invocation.save(update_fields=["status", "result", "finished_at"])
         if tool.records_evidence:
-            encoded = json.dumps(
-                result, sort_keys=True, ensure_ascii=False, default=str
-            )
-            encoded_bytes = encoded.encode()
-            SourceArtifact.objects.create(
+            capture_artifact(
+                payload=result,
                 tool_invocation=invocation,
                 kind=SourceArtifact.Kind.INTERNAL_SNAPSHOT,
-                content_hash=hashlib.sha256(encoded_bytes).hexdigest(),
-                mime_type="application/json",
-                byte_size=len(encoded_bytes),
-                excerpt=encoded[:8000],
-                metadata={"tool_name": tool.name, "tool_version": tool.version},
+                tool_name=tool.name,
+                tool_version=tool.version,
             )
         return StepResult(step=step, output=result, tool_invocations=[invocation])
 

@@ -66,6 +66,8 @@ def test_default_registry_exposes_namespaced_read_tools() -> None:
         "knowledge.search_entities",
         "knowledge.get_entity",
         "knowledge.get_relations",
+        "web.search",
+        "web.fetch",
     }
 
 

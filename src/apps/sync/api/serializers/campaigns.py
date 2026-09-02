@@ -1,6 +1,7 @@
 from django.utils import timezone
 from rest_framework import serializers
 
+from apps.ai.models import AIClaim, ClaimEvidence
 from apps.sync.models import SyncCampaign, SyncWorkItem
 
 
@@ -103,7 +104,50 @@ class SyncWorkItemSerializer(serializers.ModelSerializer):
             "next_retry_at",
             "last_error_code",
             "ai_processed_at",
+            "ai_enriched_at",
             "started_at",
             "finished_at",
             "updated_at",
+        )
+
+
+class ClaimEvidenceSerializer(serializers.ModelSerializer):
+    source_url = serializers.CharField(source="artifact.source_url", read_only=True)
+    observation = serializers.UUIDField(
+        source="observation_id", read_only=True, allow_null=True
+    )
+
+    class Meta:
+        model = ClaimEvidence
+        fields = (
+            "locator",
+            "excerpt",
+            "excerpt_hash",
+            "relevance",
+            "source_url",
+            "observation",
+        )
+
+
+class AIClaimSerializer(serializers.ModelSerializer):
+    evidence = ClaimEvidenceSerializer(
+        source="evidence_links", many=True, read_only=True
+    )
+
+    class Meta:
+        model = AIClaim
+        fields = (
+            "id",
+            "claim_type",
+            "predicate_slug",
+            "proposed_value",
+            "model_confidence",
+            "evidence_strength",
+            "calibrated_confidence",
+            "status",
+            "policy_decision",
+            "policy_reason",
+            "created_at",
+            "decided_at",
+            "evidence",
         )

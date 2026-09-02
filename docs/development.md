@@ -77,12 +77,20 @@ are exposed through:
 ```text
 GET  /api/v1/operations/sync/
 POST /api/v1/operations/sync/
+GET  /api/v1/operations/sync/summary/
 GET  /api/v1/operations/sync/{campaign_id}/
 GET  /api/v1/operations/sync/{campaign_id}/items/
+GET  /api/v1/operations/sync/{campaign_id}/claims/
 POST /api/v1/operations/sync/{campaign_id}/pause/
 POST /api/v1/operations/sync/{campaign_id}/resume/
 POST /api/v1/operations/sync/{campaign_id}/cancel/
 ```
+
+`GET /operations/sync/summary/` is the monitoring surface: campaign counts by
+status and provider, stale worker leases (heartbeat expired), queued/failed work
+items, and pending AI claims. `GET /operations/sync/{id}/claims/` paginates the
+AI decision trail (claims with model/calibrated confidence, policy decision,
+and linked observation/web evidence) for admin review.
 
 `full` campaigns enumerate a provider catalog. `incremental` campaigns use the
 AniList `updatedAt_greater` watermark when available. A provider without a
@@ -116,6 +124,20 @@ The default AI normalization mode processes every successful item in bounded
 batches. `--ai-sample-size N` is an explicit shadow experiment cap. AI output is
 an evidence-backed claim/proposal tied to an observation and cannot directly
 overwrite canonical projections.
+
+After normalization, campaigns run a bounded **enrichment** phase
+(`AI_ENRICH_SAMPLE_SIZE`, default 200) that completes missing multilingual
+titles/descriptions for sampled work entities. Enrichment is evidence-first:
+`web.search`/`web.fetch` tools gather public pages, which are content-hashed
+into `SourceArtifact` rows and linked through `ClaimEvidence`; every proposal is
+persisted as an `AIClaim` with model confidence, evidence strength, and a
+calibrated confidence. Title names are auto-applied only when
+`AI_ENRICH_APPLY=true` (default false) and calibrated confidence clears
+`AI_ENRICH_MIN_CONFIDENCE` (default 0.85); descriptions always remain
+reviewable claims. Without a configured `WEB_SEARCH_API_KEY` the phase degrades
+to model-only evidence instead of failing. `enrich_sample_size`,
+`enrich_apply`, `enrich_min_confidence`, and `enrich_languages` can override the
+settings per campaign in `parameters`.
 
 ## API Contract
 

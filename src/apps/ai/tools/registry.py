@@ -132,9 +132,11 @@ class ToolRegistry:
 def create_default_tool_registry() -> ToolRegistry:
     """Build a registry used by harness workers and MCP adapters."""
     from .knowledge import register_knowledge_tools
+    from .web import register_web_tools
 
     registry = ToolRegistry()
     register_knowledge_tools(registry)
+    register_web_tools(registry)
     return registry
 
 
@@ -145,6 +147,8 @@ def bootstrap_default_tools() -> ToolRegistry:
     """Register the built-in tools exactly once in the process singleton."""
     if not tool_registry:
         from .knowledge import register_knowledge_tools
+        from .web import register_web_tools
 
         register_knowledge_tools(tool_registry)
+        register_web_tools(tool_registry)
     return tool_registry
