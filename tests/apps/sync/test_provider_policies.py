@@ -10,7 +10,11 @@ from apps.sync.providers.bangumi import (
     BangumiClient,
     parse_bangumi_cursor,
 )
-from apps.sync.providers.exceptions import AniListAPIError, VNDBAPIError
+from apps.sync.providers.exceptions import (
+    AniListAPIError,
+    BangumiAPIError,
+    VNDBAPIError,
+)
 from apps.sync.providers.vndb import VNDB_SOURCE, VNDB_VN_NAMESPACE, VNDBClient
 from apps.sync.services.campaign_service import (
     PROVIDERS,
@@ -52,12 +56,12 @@ def test_bangumi_catalog_discovery_pages_by_type_and_offset() -> None:
     client = BangumiClient(Mock())
     client._get = Mock(
         side_effect=[
-            [{"id": 1}, {"id": 2}],  # type 1, short page -> type 2
-            [{"id": 10}, {"id": 11}],  # type 2, short page -> type 3
-            [{"id": 30}, {"id": 31}, {"id": 32}],  # type 3, full page -> same type
-            [{"id": 33}, {"id": 34}],  # type 3, short page -> type 4
-            [{"id": 40}],  # type 4, short page -> type 6
-            [{"id": 60}],  # type 6, short page -> done
+            {"data": [{"id": 1}, {"id": 2}], "total": 100},  # type 1 short page
+            {"data": [{"id": 10}, {"id": 11}], "total": 100},  # type 2 short page
+            {"data": [{"id": 30}, {"id": 31}, {"id": 32}], "total": 100},  # full
+            {"data": [{"id": 33}, {"id": 34}], "total": 100},  # type 3 short page
+            {"data": [{"id": 40}], "total": 100},  # type 4 short page
+            {"data": [{"id": 60}], "total": 100},  # type 6 short page -> done
         ]
     )
 
@@ -67,6 +71,7 @@ def test_bangumi_catalog_discovery_pages_by_type_and_offset() -> None:
         page = client.discover_subject_page(cursor=cursor, page_size=3)
         pages.append((page.external_ids, page.next_cursor))
         cursor = page.next_cursor
+        assert page.total_count == 100
 
     assert pages == [
         (("1", "2"), "2:0"),
@@ -78,6 +83,14 @@ def test_bangumi_catalog_discovery_pages_by_type_and_offset() -> None:
     ]
     first_params = client._get.call_args_list[0].kwargs["params"]
     assert first_params == {"type": 1, "limit": 3, "offset": 0, "sort": "date"}
+
+
+def test_bangumi_catalog_discovery_rejects_unwrapped_malformed_response() -> None:
+    client = BangumiClient(Mock())
+    client._get = Mock(return_value={"nope": []})
+
+    with pytest.raises(BangumiAPIError, match="data list"):
+        client.discover_subject_page(cursor="1:0", page_size=3)
 
 
 @pytest.mark.django_db

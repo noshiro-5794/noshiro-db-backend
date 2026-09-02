@@ -166,7 +166,7 @@ class BangumiClient:
         """
         type_id, offset = parse_bangumi_cursor(cursor)
         limit = min(max(page_size, 1), 100)
-        data = self._get(
+        payload = self._get(
             "/v0/subjects",
             params={
                 "type": type_id,
@@ -175,12 +175,24 @@ class BangumiClient:
                 "sort": "date",
             },
         )
-        if not isinstance(data, list):
-            raise BangumiAPIError("Bangumi subjects response must be a list.")
+        if isinstance(payload, dict) and isinstance(payload.get("data"), list):
+            items = payload["data"]
+            total_count = payload.get("total")
+        elif isinstance(payload, list):
+            # Older/unwrapped responses are tolerated for forward compatibility.
+            items = payload
+            total_count = None
+        else:
+            raise BangumiAPIError(
+                "Bangumi subjects response must contain a data list."
+            )
         external_ids = tuple(
             str(item["id"])
-            for item in data
+            for item in items
             if isinstance(item, dict) and isinstance(item.get("id"), int)
+        )
+        parsed_total = (
+            int(total_count) if isinstance(total_count, (int, str)) else None
         )
         next_cursor: str | None
         if len(external_ids) == limit and offset + limit < BANGUMI_BROWSE_MAX_OFFSET:
@@ -191,7 +203,11 @@ class BangumiClient:
             next_cursor = f"{BANGUMI_SUBJECT_TYPES[next_type_index]}:0"
         else:
             next_cursor = None
-        return CatalogPage(external_ids=external_ids, next_cursor=next_cursor)
+        return CatalogPage(
+            external_ids=external_ids,
+            next_cursor=next_cursor,
+            total_count=parsed_total,
+        )
 
     def discover_subject_delta_page(
         self,
