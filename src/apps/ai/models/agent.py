@@ -177,6 +177,7 @@ class ToolInvocation(models.Model):
     result = models.JSONField(null=True, blank=True)
     error = models.TextField(blank=True)
     idempotency_key = models.CharField(max_length=128, blank=True)
+    idempotency_scope = models.CharField(max_length=128, blank=True)
     permission_scope = models.CharField(max_length=64)
     risk_level = models.CharField(max_length=16)
     has_side_effects = models.BooleanField(default=False)

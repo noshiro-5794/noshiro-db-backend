@@ -25,6 +25,11 @@ class Migration(migrations.Migration):
             name='idempotency_scope',
             field=models.CharField(default='system', max_length=128),
         ),
+        migrations.AddField(
+            model_name='toolinvocation',
+            name='idempotency_scope',
+            field=models.CharField(blank=True, max_length=128),
+        ),
         migrations.AddConstraint(
             model_name='agentrun',
             constraint=models.UniqueConstraint(condition=models.Q(('idempotency_key', ''), _negated=True), fields=('idempotency_scope', 'idempotency_key'), name='uq_agent_run_idempotency'),
