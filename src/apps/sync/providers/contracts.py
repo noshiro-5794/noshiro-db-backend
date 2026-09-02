@@ -50,6 +50,7 @@ class DeltaPage:
     next_cursor: str | None
     watermark: str
     upstream_updated_at: datetime | None = None
+    total_count: int | None = None
 
 
 class ProviderCatalogContract:

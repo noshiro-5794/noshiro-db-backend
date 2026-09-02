@@ -200,6 +200,6 @@ def test_anilist_delta_discovery_uses_updated_watermark() -> None:
 
     assert page.external_ids == ("10",)
     assert page.next_cursor == "3"
-    assert page.watermark == "1690000000"
+    assert page.watermark == "1700000000"
     variables = http_client.post.call_args.kwargs["json"]["variables"]
     assert variables == {"page": 2, "perPage": 25, "updatedAfter": 1690000000}

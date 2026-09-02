@@ -49,6 +49,11 @@ class CampaignProvider:
     discover: Callable[..., CatalogPage]
     import_item: Callable[[str], Entity]
     discover_delta: Callable[..., Any] | None = None
+    # True when discovery provably enumerates the whole catalog (stable ordering
+    # plus an authoritative terminal page); only then is MISSING reconciliation
+    # safe. Bangumi's browse endpoint is an approximate view and defaults to
+    # False.
+    discovery_complete: bool = True
 
 
 PROVIDERS: dict[str, CampaignProvider] = {
@@ -59,12 +64,15 @@ PROVIDERS: dict[str, CampaignProvider] = {
         import_item=lambda external_id: vndb_import_service.import_work(
             vndb_id=external_id, include_related=True
         ),
+        discover_delta=vndb_client.discover_vn_delta_page,
     ),
     "bangumi": CampaignProvider(
         slug="bangumi",
         namespace_slug=BANGUMI_SUBJECT_NAMESPACE.slug,
         discover=bangumi_client.discover_subject_page,
         import_item=lambda external_id: _import_bangumi_subject(external_id),
+        discover_delta=bangumi_client.discover_subject_delta_page,
+        discovery_complete=False,
     ),
     "anilist": CampaignProvider(
         slug="anilist",
@@ -214,6 +222,7 @@ class SyncCampaignService:
                 )
             if campaign.status == SyncCampaign.Status.REVIEWING:
                 self._write_quality_report(campaign)
+                self._promote_watermark(campaign)
                 self._transition_required(campaign, SyncCampaign.Status.COMPLETED)
         except Exception as exc:
             logger.exception(
@@ -330,7 +339,7 @@ class SyncCampaignService:
         provider = self.provider_for(campaign.provider_slug)
         params = dict(campaign.parameters or {})
         discovery = dict(params.get("discovery") or {})
-        default_cursor = "0" if campaign.provider_slug == "bangumi" else "1"
+        default_cursor = self._default_cursor(campaign)
         cursor = discovery.get("next_cursor") or default_cursor
         page_size = self._positive_int(params.get("page_size"), self.DEFAULT_PAGE_SIZE)
         max_pages = params.get("max_pages")
@@ -348,12 +357,11 @@ class SyncCampaignService:
                 )
             else:
                 page = provider.discover(cursor=cursor, page_size=page_size)
-            page_number = max(1, int(cursor))
             SyncWorkItem.objects.bulk_create(
                 [
                     SyncWorkItem(
                         campaign=campaign,
-                        shard=page_number,
+                        shard=total_pages + 1,
                         cursor=external_id,
                     )
                     for external_id in page.external_ids
@@ -363,7 +371,13 @@ class SyncCampaignService:
             discovery["next_cursor"] = page.next_cursor
             total_pages += 1
             discovery["pages"] = total_pages
-            if page.total_count is not None:
+            if campaign.campaign_type == "incremental":
+                pending = self._accumulate_watermark(
+                    params.get("pending_watermark"), page
+                )
+                if pending is not None:
+                    params["pending_watermark"] = pending
+            if getattr(page, "total_count", None) is not None:
                 campaign.total_items = max(campaign.total_items, page.total_count)
             else:
                 campaign.total_items = SyncWorkItem.objects.filter(
@@ -379,16 +393,43 @@ class SyncCampaignService:
             ):
                 discovery["truncated"] = bool(cursor)
                 discovery["next_cursor"] = None
+                params.pop("pending_watermark", None)
                 params["discovery"] = discovery
                 campaign.parameters = params
                 campaign.save(update_fields=["parameters", "updated_at"])
                 return True
         campaign.total_items = SyncWorkItem.objects.filter(campaign=campaign).count()
         if campaign.campaign_type == "incremental" and not cursor:
-            params["watermark"] = str(int(time.time()))
+            params.setdefault("pending_watermark", str(int(time.time())))
         campaign.parameters = params
         campaign.save(update_fields=["parameters", "total_items", "updated_at"])
         return not cursor
+
+    @staticmethod
+    def _accumulate_watermark(
+        pending: str | None, page: CatalogPage | Any
+    ) -> str | None:
+        """Merge a delta page's watermark into the campaign's pending watermark.
+
+        Providers with a true update feed (AniList) report the highest
+        ``updatedAt`` observed so far; advancing the watermark to that value
+        closes the moving-window gap. Pseudo-watermarks from payload
+        reconciliation providers are ignored.
+        """
+        raw = getattr(page, "watermark", None)
+        if not isinstance(raw, str) or not raw.isdigit():
+            return pending
+        candidate = int(raw)
+        if pending is None or int(pending) < candidate:
+            return str(candidate)
+        return pending
+
+    @staticmethod
+    def _default_cursor(campaign: SyncCampaign) -> str:
+        """Return the starting discovery cursor for a fresh campaign step."""
+        if campaign.provider_slug == "bangumi":
+            return "0" if campaign.campaign_type == "incremental" else "1:0"
+        return "1"
 
     def _fetch(self, campaign: SyncCampaign, *, max_items: int | None) -> bool:
         provider = self.provider_for(campaign.provider_slug)
@@ -438,6 +479,9 @@ class SyncCampaignService:
             try:
                 entity = provider.import_item(item.cursor)
             except ProviderAPIError as exc:
+                if getattr(exc, "is_not_found", False):
+                    self._skip_item(campaign, item, exc)
+                    continue
                 self._fail_item(campaign, item, exc)
                 continue
             except Exception as exc:
@@ -571,10 +615,7 @@ class SyncCampaignService:
     @staticmethod
     def _reconcile_provider_records(campaign: SyncCampaign) -> None:
         """Mark records absent from a completed full catalog as missing."""
-        if campaign.campaign_type != "full":
-            return
-        discovery = dict((campaign.parameters or {}).get("discovery") or {})
-        if discovery.get("next_cursor") or discovery.get("truncated"):
+        if not SyncCampaignService._can_mark_missing(campaign):
             return
         namespace_slug = PROVIDERS[campaign.provider_slug].namespace_slug
         seen = SyncWorkItem.objects.filter(campaign=campaign).values("cursor")
@@ -583,6 +624,21 @@ class SyncCampaignService:
             namespace__slug=namespace_slug,
             status=ProviderRecord.Status.ACTIVE,
         ).exclude(external_id__in=seen).update(status=ProviderRecord.Status.MISSING)
+
+    @staticmethod
+    def _can_mark_missing(campaign: SyncCampaign) -> bool:
+        """MISSING marking is only safe after a provably complete full catalog."""
+        if campaign.campaign_type != "full":
+            return False
+        discovery = dict((campaign.parameters or {}).get("discovery") or {})
+        if discovery.get("next_cursor") or discovery.get("truncated"):
+            return False
+        provider = PROVIDERS[campaign.provider_slug]
+        return bool(
+            (campaign.parameters or {}).get(
+                "reconcile_missing", provider.discovery_complete
+            )
+        )
 
     @staticmethod
     def _taxonomy_values(payload: dict[str, Any]) -> tuple[str, ...]:
@@ -608,6 +664,7 @@ class SyncCampaignService:
             "total_items": campaign.total_items,
             "succeeded_items": succeeded,
             "failed_items": failed,
+            "skipped_items": campaign.skipped_items,
             "ai_mode": campaign.ai_mode,
             "evidence_first": True,
             "discovery_truncated": bool(
@@ -615,6 +672,39 @@ class SyncCampaignService:
             ),
         }
         campaign.save(update_fields=["quality_report", "updated_at"])
+
+    @staticmethod
+    def _promote_watermark(campaign: SyncCampaign) -> None:
+        """Advance the incremental watermark only after a fully successful campaign."""
+        if campaign.campaign_type != "incremental":
+            return
+        parameters = dict(campaign.parameters or {})
+        if dict(parameters.get("discovery") or {}).get("truncated"):
+            return
+        pending = parameters.pop("pending_watermark", None)
+        if pending is None:
+            return
+        parameters["watermark"] = pending
+        campaign.parameters = parameters
+        campaign.save(update_fields=["parameters", "updated_at"])
+
+    @staticmethod
+    def _skip_item(
+        campaign: SyncCampaign, item: SyncWorkItem, error: Exception
+    ) -> None:
+        SyncWorkItem.objects.filter(pk=item.pk).update(
+            status=SyncWorkItem.Status.SKIPPED,
+            error=f"{type(error).__name__}: {error}"[:4000],
+            last_error_code="not_found",
+            next_retry_at=None,
+            finished_at=timezone.now(),
+            lease_owner="",
+            lease_expires_at=None,
+        )
+        SyncCampaign.objects.filter(pk=campaign.pk).update(
+            processed_items=F("processed_items") + 1,
+            skipped_items=F("skipped_items") + 1,
+        )
 
     @staticmethod
     def _fail_item(

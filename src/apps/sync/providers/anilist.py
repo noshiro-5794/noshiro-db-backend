@@ -84,7 +84,7 @@ class AniListClient:
     query ($page: Int!, $perPage: Int!, $updatedAfter: Int!) {
       Page(page: $page, perPage: $perPage) {
         pageInfo { hasNextPage }
-        media(type: ANIME, sort: UPDATED_AT_DESC, updatedAt_greater: $updatedAfter) {
+        media(type: ANIME, sort: UPDATED_AT, updatedAt_greater: $updatedAfter) {
           id
           updatedAt
         }
@@ -282,11 +282,19 @@ class AniListClient:
             for item in items
             if isinstance(item, dict) and isinstance(item.get("id"), int)
         )
+        page_updated = max(
+            (
+                int(item["updatedAt"])
+                for item in items
+                if isinstance(item, dict) and isinstance(item.get("updatedAt"), int)
+            ),
+            default=updated_after,
+        )
         page_info = page_data.get("pageInfo") or {}
         return DeltaPage(
             external_ids=external_ids,
             next_cursor=str(page + 1) if page_info.get("hasNextPage") else None,
-            watermark=str(updated_after),
+            watermark=str(page_updated),
         )
 
     def close(self) -> None:

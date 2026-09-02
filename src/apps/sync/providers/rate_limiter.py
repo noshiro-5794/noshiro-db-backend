@@ -49,8 +49,9 @@ class DistributedRateLimiter:
             try:
                 acquired = cache.add(lock_key, "1", timeout=self.lock_ttl)
             except Exception:
-                # Local development/tests may not have Redis; production keeps the
-                # distributed path and falls back only when the cache is unavailable.
+                # Local development/tests may not have Redis. Production fails
+                # fast instead of bursting past the provider's rate limit; the
+                # campaign retry/backoff machinery then retries the step.
                 if self.allow_fallback:
                     self._fallback.acquire()
                     return

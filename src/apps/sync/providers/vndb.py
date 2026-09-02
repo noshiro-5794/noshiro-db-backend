@@ -4,10 +4,11 @@ from typing import Any
 import httpx
 from django.conf import settings
 
-from apps.index.models import Provider, ProviderNamespace
+from apps.index.models import Provider, ProviderNamespace, ProviderRecord
 from apps.sync.providers.contracts import (
     CatalogPage,
     CatalogSourceSpec,
+    DeltaPage,
     SourceNamespaceSpec,
 )
 from apps.sync.providers.exceptions import VNDBAPIError
@@ -147,6 +148,8 @@ class VNDBClient:
         page: int = 1,
         results: int = 100,
         count: bool = False,
+        sort: str | None = None,
+        reverse: bool = False,
     ) -> dict[str, Any]:
         provider = (
             Provider.objects.filter(slug=VNDB_SOURCE.slug)
@@ -165,6 +168,9 @@ class VNDBClient:
             "results": min(max(results, 1), 100),
             "count": count,
         }
+        if sort:
+            payload["sort"] = sort
+            payload["reverse"] = reverse
         try:
             self._rate_limiter.acquire()
             response = self.client.post(f"/{endpoint}", json=payload)
@@ -208,6 +214,7 @@ class VNDBClient:
             page=page,
             results=page_size,
             count=True,
+            sort="id",
         )
         external_ids = tuple(
             item["id"]
@@ -220,6 +227,33 @@ class VNDBClient:
             total_count=(
                 int(data["count"]) if isinstance(data.get("count"), int) else None
             ),
+        )
+
+    def discover_vn_delta_page(
+        self,
+        *,
+        watermark: str,
+        cursor: str | None = None,
+        page_size: int = 100,
+    ) -> DeltaPage:
+        """Re-fetch known records; VNDB has no update-feed, so this is a payload
+        reconciliation pass. New works are found by periodic full campaigns."""
+        del watermark
+        offset = max(0, int(cursor or "0"))
+        limit = min(max(page_size, 1), 1000)
+        records = ProviderRecord.objects.filter(
+            namespace__provider__slug=VNDB_SOURCE.slug,
+            namespace__slug=VNDB_VN_NAMESPACE.slug,
+            status=ProviderRecord.Status.ACTIVE,
+        ).order_by("external_id")
+        external_ids = tuple(
+            records.values_list("external_id", flat=True)[offset : offset + limit]
+        )
+        return DeltaPage(
+            external_ids=external_ids,
+            next_cursor=str(offset + limit) if len(external_ids) == limit else None,
+            watermark="known-record-reconciliation",
+            total_count=records.count(),
         )
 
     def fetch_related(self, endpoint: str, *, vndb_id: str, fields: str) -> list[dict]:

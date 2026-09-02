@@ -3,10 +3,11 @@ from typing import Any
 import httpx
 from django.conf import settings
 
-from apps.index.models import Provider
+from apps.index.models import Provider, ProviderRecord
 from apps.sync.providers.contracts import (
     CatalogPage,
     CatalogSourceSpec,
+    DeltaPage,
     SourceNamespaceSpec,
 )
 from apps.sync.providers.exceptions import BangumiAPIError
@@ -74,6 +75,11 @@ BANGUMI_CALENDAR_NAMESPACE = SourceNamespaceSpec(
     resource_type="schedule",
     description="Point-in-time Bangumi weekly broadcast calendar",
 )
+
+# Bangumi's browse endpoint only accepts these subject types and skips type 5.
+BANGUMI_SUBJECT_TYPES = (1, 2, 3, 4, 6)
+# Offset paging beyond this bound is rejected by the API; treat it as terminal.
+BANGUMI_BROWSE_MAX_OFFSET = 100_000
 
 
 class BangumiClient:
@@ -146,14 +152,28 @@ class BangumiClient:
         return self._get(f"/v0/subjects/{subject_id}")
 
     def discover_subject_page(
-        self, *, cursor: str | None = None, page_size: int = 100
+        self,
+        *,
+        cursor: str | None = None,
+        page_size: int = 100,
     ) -> CatalogPage:
-        """Walk Bangumi's offset catalog; completion is proven by a short page."""
-        offset = max(0, int(cursor or "0"))
+        """Page the browse endpoint across all subject types.
+
+        ``GET /v0/subjects`` requires ``type`` and only supports date/rank
+        sorting, so the cursor encodes ``<type>:<offset>``. The endpoint is an
+        approximate catalog view rather than a stable global enumeration, so a
+        full campaign cannot prove completeness (see docs/development.md).
+        """
+        type_id, offset = parse_bangumi_cursor(cursor)
         limit = min(max(page_size, 1), 100)
         data = self._get(
             "/v0/subjects",
-            params={"limit": limit, "offset": offset, "sort": "id"},
+            params={
+                "type": type_id,
+                "limit": limit,
+                "offset": offset,
+                "sort": "date",
+            },
         )
         if not isinstance(data, list):
             raise BangumiAPIError("Bangumi subjects response must be a list.")
@@ -162,9 +182,41 @@ class BangumiClient:
             for item in data
             if isinstance(item, dict) and isinstance(item.get("id"), int)
         )
-        return CatalogPage(
+        next_cursor: str | None
+        if len(external_ids) == limit and offset + limit < BANGUMI_BROWSE_MAX_OFFSET:
+            next_cursor = f"{type_id}:{offset + limit}"
+        elif (next_type_index := BANGUMI_SUBJECT_TYPES.index(type_id) + 1) < len(
+            BANGUMI_SUBJECT_TYPES
+        ):
+            next_cursor = f"{BANGUMI_SUBJECT_TYPES[next_type_index]}:0"
+        else:
+            next_cursor = None
+        return CatalogPage(external_ids=external_ids, next_cursor=next_cursor)
+
+    def discover_subject_delta_page(
+        self,
+        *,
+        watermark: str,
+        cursor: str | None = None,
+        page_size: int = 100,
+    ) -> DeltaPage:
+        """Re-fetch known records; new IDs are found by periodic frontier scans."""
+        del watermark
+        offset = max(0, int(cursor or "0"))
+        limit = min(max(page_size, 1), 1000)
+        records = ProviderRecord.objects.filter(
+            namespace__provider__slug=BANGUMI_SOURCE.slug,
+            namespace__slug=BANGUMI_SUBJECT_NAMESPACE.slug,
+            status=ProviderRecord.Status.ACTIVE,
+        ).order_by("external_id")
+        external_ids = tuple(
+            records.values_list("external_id", flat=True)[offset : offset + limit]
+        )
+        return DeltaPage(
             external_ids=external_ids,
-            next_cursor=str(offset + limit) if len(data) == limit else None,
+            next_cursor=str(offset + limit) if len(external_ids) == limit else None,
+            watermark="known-record-reconciliation",
+            total_count=records.count(),
         )
 
     def fetch_subject_persons(self, subject_id: int) -> list[dict[str, Any]]:
@@ -198,6 +250,20 @@ class BangumiClient:
         if self._client is not None:
             self._client.close()
             self._client = None
+
+
+def parse_bangumi_cursor(cursor: str | None) -> tuple[int, int]:
+    """Parse ``<type>:<offset>`` with a safe fallback to the first subject type."""
+    if cursor:
+        raw = str(cursor).split(":", 1)
+        try:
+            type_id = int(raw[0])
+            offset = int(raw[1]) if len(raw) == 2 else 0
+            if type_id in BANGUMI_SUBJECT_TYPES and offset >= 0:
+                return type_id, offset
+        except ValueError:
+            pass
+    return BANGUMI_SUBJECT_TYPES[0], 0
 
 
 bangumi_client = BangumiClient()

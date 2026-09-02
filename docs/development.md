@@ -89,6 +89,24 @@ AniList `updatedAt_greater` watermark when available. A provider without a
 reliable delta feed must use periodic catalog reconciliation and compare stored
 payload hashes; it must not guess an update frontier from numeric IDs.
 
+VNDB and Bangumi expose no update-feed, so their incremental campaigns re-fetch
+known active records and rely on payload-hash revisions to detect changes; new
+records are discovered by periodic full campaigns. AniList uses a true
+`updatedAt_greater` watermark walked in ascending `UPDATED_AT` order; the
+watermark advances to the highest `updatedAt` observed, which closes the
+moving-window gap instead of using wall-clock time. Incremental watermarks are
+committed only after the campaign finishes successfully, and a truncated
+discovery never advances the watermark.
+
+Bangumi has no stable catalog enumeration endpoint: `GET /v0/subjects` requires
+`type` and only sorts by `date` or `rank`, so its full campaign pages each
+subject type and treats discovery as an approximate periodic reconciliation
+that cannot be proven complete. Consequently Bangumi full campaigns do not mark
+unseen records as `MISSING` by default; pass `reconcile_missing: true` in the
+campaign parameters to opt in. VNDB/AniList full discoveries use stable ID
+ordering plus the API's authoritative count/terminal page, so MISSING
+reconciliation is enabled by default for them.
+
 Production provider clients share a Redis-backed per-provider interval limiter.
 429, 5xx, and transport failures carry retry metadata and use bounded exponential
 backoff; validation and not-found errors are terminal. The in-process limiter is

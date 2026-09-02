@@ -346,7 +346,6 @@ BANGUMI_RATE_LIMIT_INTERVAL = env.float(
     "BANGUMI_RATE_LIMIT_INTERVAL",
     default=0.3,
 )
-
 BANGUMI_IMAGE_ALLOWED_HOSTS = env_list(
     "BANGUMI_IMAGE_ALLOWED_HOSTS",
     default=("lain.bgm.tv",),

@@ -12,6 +12,7 @@ from apps.sync.api.serializers.campaigns import (
 from apps.sync.models import SyncCampaign
 from apps.sync.services.campaign_service import sync_campaign_service
 from apps.sync.tasks.campaign import run_sync_campaign_task
+from shared.api.pagination import DefaultPageNumberPagination
 
 
 def _campaign_or_404(campaign_id):
@@ -79,7 +80,11 @@ class SyncCampaignItemsView(APIView):
         queryset = campaign.work_items.order_by("shard", "id")
         if item_status := request.query_params.get("status"):
             queryset = queryset.filter(status=item_status)
-        return Response(SyncWorkItemSerializer(queryset[:500], many=True).data)
+        paginator = DefaultPageNumberPagination()
+        page = paginator.paginate_queryset(queryset, request, view=self)
+        return paginator.get_paginated_response(
+            SyncWorkItemSerializer(page, many=True).data
+        )
 
 
 class SyncCampaignActionView(APIView):
