@@ -21,9 +21,8 @@ def capture_artifact(
     tool_invocation=None,
 ) -> SourceArtifact:
     """Persist a content-addressed evidence artifact from a tool result."""
-    encoded = json.dumps(
-        payload, sort_keys=True, ensure_ascii=False, default=str
-    ).encode()
+    text = json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)
+    encoded = text.encode()
     return SourceArtifact.objects.create(
         tool_invocation=tool_invocation,
         kind=kind,
@@ -31,7 +30,7 @@ def capture_artifact(
         content_hash=hashlib.sha256(encoded).hexdigest(),
         mime_type=mime_type,
         byte_size=len(encoded),
-        excerpt=encoded[:8000],
+        excerpt=text[:8000],
         metadata={
             **(metadata or {}),
             **({"tool_name": tool_name} if tool_name else {}),

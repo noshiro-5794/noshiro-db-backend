@@ -3,6 +3,8 @@ from unittest.mock import MagicMock, Mock
 import pytest
 from django.test import override_settings
 
+from apps.ai.models import SourceArtifact
+from apps.ai.tools.evidence import capture_artifact
 from apps.ai.tools.registry import create_default_tool_registry
 from apps.ai.tools.web import WebFetchInput, WebFetchTool, WebSearchInput, WebSearchTool
 
@@ -83,3 +85,19 @@ def test_default_registry_registers_web_tools() -> None:
     assert search.records_evidence is True
     assert fetch.records_evidence is True
     assert search.permission == "knowledge:read"
+
+
+@pytest.mark.django_db(transaction=True)
+def test_capture_artifact_stores_text_excerpt() -> None:
+    artifact = capture_artifact(
+        payload={"title": "Fate/stay night", "url": "https://example.org/fate"},
+        kind=SourceArtifact.Kind.SEARCH_RESULT,
+        source_url="https://example.org/fate",
+    )
+
+    artifact.refresh_from_db()
+    assert isinstance(artifact.excerpt, str)
+    assert "Fate/stay night" in artifact.excerpt
+    assert artifact.byte_size == len(
+        b'{"title": "Fate/stay night", "url": "https://example.org/fate"}'
+    )
