@@ -313,6 +313,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.sync.tasks.maintenance.scan_stale_sync_jobs",
         "schedule": 300.0,
     },
+    "stale-sync-state-scan": {
+        "task": "apps.sync.tasks.maintenance.scan_stale_sync_states",
+        "schedule": 300.0,
+    },
 }
 
 # Email and external services
@@ -468,6 +472,8 @@ SYNC_INCREMENTAL_MAX_CONSECUTIVE_ERRORS = env.int(
 SYNC_INCREMENTAL_MAX_CONSECUTIVE_SKIPS = env.int(
     "SYNC_INCREMENTAL_MAX_CONSECUTIVE_SKIPS", default=50
 )
+
+SYNC_STALE_STATE_SECONDS = env.int("SYNC_STALE_STATE_SECONDS", default=5400)
 
 # Object storage and uploads
 

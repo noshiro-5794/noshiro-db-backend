@@ -5,6 +5,7 @@ from django.conf import settings
 from django.db import transaction
 from django.db.models import F, IntegerField, Max
 from django.db.models.functions import Cast
+from django.utils import timezone
 
 from apps.index.models import (
     ProviderRepresentation,
@@ -369,6 +370,7 @@ class IncrementalSyncService:
     def _record_progress(cls, *, task_name: str, current_id: int) -> None:
         SyncState.objects.filter(task_name=task_name, shard=cls.SHARD).update(
             current_id=current_id,
+            updated_at=timezone.now(),
         )
 
     @classmethod
@@ -376,6 +378,7 @@ class IncrementalSyncService:
         SyncState.objects.filter(task_name=task_name, shard=cls.SHARD).update(
             current_id=current_id,
             status=SyncState.Status.FINISHED,
+            updated_at=timezone.now(),
         )
 
     @classmethod
@@ -385,6 +388,7 @@ class IncrementalSyncService:
             current_id=current_id,
             status=SyncState.Status.FAILED,
             fail_count=F("fail_count") + 1,
+            updated_at=timezone.now(),
         )
 
     @classmethod

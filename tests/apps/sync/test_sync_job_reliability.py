@@ -2,11 +2,17 @@ from datetime import timedelta
 
 import pytest
 from django.core.cache import cache
+from django.test import override_settings
 from django.utils import timezone
 
-from apps.sync.models import SyncJob
+from apps.sync.models import SyncJob, SyncState
+from apps.sync.services.incremental_sync_service import IncrementalSyncService
 from apps.sync.services.sync_job_service import sync_job_service
-from apps.sync.tasks.maintenance import scan_stale_sync_jobs, worker_heartbeat
+from apps.sync.tasks.maintenance import (
+    scan_stale_sync_jobs,
+    scan_stale_sync_states,
+    worker_heartbeat,
+)
 
 
 def _create_job(**kwargs) -> SyncJob:
@@ -76,6 +82,54 @@ def test_stale_job_scan_marks_expired_lease_as_failed() -> None:
     assert result == {"stale_jobs": 1}
     assert stale_job.status == SyncJob.Status.FAILED
     assert "Lease expired" in stale_job.error
+
+
+def _sync_state(**kwargs) -> SyncState:
+    return SyncState.objects.create(
+        task_name="incremental_subject",
+        shard=IncrementalSyncService.SHARD,
+        end_id=1000,
+        **kwargs,
+    )
+
+
+@pytest.mark.django_db
+def test_record_progress_refreshes_updated_at() -> None:
+    state = _sync_state(status=SyncState.Status.RUNNING)
+    SyncState.objects.filter(pk=state.pk).update(
+        updated_at=timezone.now() - timedelta(hours=2)
+    )
+
+    IncrementalSyncService._record_progress(
+        task_name="incremental_subject",
+        current_id=42,
+    )
+
+    state.refresh_from_db()
+    assert state.current_id == 42
+    assert state.updated_at > timezone.now() - timedelta(minutes=1)
+
+
+@pytest.mark.django_db
+@override_settings(SYNC_STALE_STATE_SECONDS=60)
+def test_stale_state_scan_unlocks_only_old_running_windows() -> None:
+    stale = _sync_state(status=SyncState.Status.RUNNING)
+    active = _sync_state(
+        task_name="incremental_episode",
+        status=SyncState.Status.RUNNING,
+    )
+    SyncState.objects.filter(pk=stale.pk).update(
+        updated_at=timezone.now() - timedelta(hours=2)
+    )
+
+    result = scan_stale_sync_states()
+
+    assert result == {"stale_states": 1}
+    stale.refresh_from_db()
+    active.refresh_from_db()
+    assert stale.status == SyncState.Status.FAILED
+    assert stale.fail_count == 1
+    assert active.status == SyncState.Status.RUNNING
 
 
 @pytest.mark.django_db
