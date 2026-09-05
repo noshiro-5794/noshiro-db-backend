@@ -47,18 +47,18 @@ def test_enrich_phase_is_bounded_and_tracks_stats() -> None:
     ) as mock:
         done = sync_campaign_service._enrich(campaign)
 
-    assert done is False  # sample of 3 consumed; one item remains
-    assert mock.call_count == 3
+    assert done is False  # batch of 2 consumed in this step
+    assert mock.call_count == 2
     assert (
         SyncWorkItem.objects.filter(
             campaign=campaign, ai_enriched_at__isnull=False
         ).count()
-        == 3
+        == 2
     )
     campaign.refresh_from_db()
     assert campaign.parameters["enrichment"] == {
-        "claims": 6,
-        "applied": 3,
+        "claims": 4,
+        "applied": 2,
         "abstained": 0,
         "skipped": 0,
     }
@@ -70,13 +70,13 @@ def test_enrich_phase_is_bounded_and_tracks_stats() -> None:
     ) as mock:
         done = sync_campaign_service._enrich(campaign)
 
-    assert done is True
+    assert done is True  # sample cap reached after the last slot
     assert mock.call_count == 1
     assert (
         SyncWorkItem.objects.filter(
             campaign=campaign, ai_enriched_at__isnull=False
         ).count()
-        == 4
+        == 3
     )
 
 
@@ -142,7 +142,7 @@ def test_enrich_entity_reads_provider_mapped_name_keys() -> None:
     ProviderRepresentation.objects.create(
         provider_record=record,
         entity=entity,
-        mapping_kind=ProviderRepresentation.MappingKind.EXTERNAL_ID,
+        mapping_kind=ProviderRepresentation.MappingKind.EXACT,
         method=ProviderRepresentation.Method.EXTERNAL_ID,
     )
     payload_hash = hashlib.sha256(

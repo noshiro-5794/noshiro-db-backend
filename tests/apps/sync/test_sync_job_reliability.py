@@ -84,9 +84,9 @@ def test_stale_job_scan_marks_expired_lease_as_failed() -> None:
     assert "Lease expired" in stale_job.error
 
 
-def _sync_state(**kwargs) -> SyncState:
+def _sync_state(task_name: str = "incremental_subject", **kwargs) -> SyncState:
     return SyncState.objects.create(
-        task_name="incremental_subject",
+        task_name=task_name,
         shard=IncrementalSyncService.SHARD,
         end_id=1000,
         **kwargs,

@@ -50,6 +50,13 @@ DATABASES["default"]["CONN_MAX_AGE"] = 0
 DATABASES["default"]["CONN_HEALTH_CHECKS"] = False
 DATABASES["default"]["TEST"] = {"NAME": test_database_name}
 
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "noshiro-tests",
+    }
+}
+
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 
 EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"

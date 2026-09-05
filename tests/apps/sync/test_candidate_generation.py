@@ -43,7 +43,7 @@ def _entity(
     ProviderRepresentation.objects.create(
         provider_record=record,
         entity=entity,
-        mapping_kind=ProviderRepresentation.MappingKind.EXTERNAL_ID,
+        mapping_kind=ProviderRepresentation.MappingKind.EXACT,
         method=ProviderRepresentation.Method.EXTERNAL_ID,
     )
     EntityName.objects.create(

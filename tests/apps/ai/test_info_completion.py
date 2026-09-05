@@ -50,7 +50,7 @@ def _fixture() -> tuple[Entity, Observation, AgentRun]:
     ProviderRepresentation.objects.create(
         provider_record=record,
         entity=entity,
-        mapping_kind=ProviderRepresentation.MappingKind.EXTERNAL_ID,
+        mapping_kind=ProviderRepresentation.MappingKind.EXACT,
         method=ProviderRepresentation.Method.EXTERNAL_ID,
     )
     revision = ProviderRevision.objects.create(
@@ -135,7 +135,7 @@ def test_high_confidence_title_is_applied_when_enabled() -> None:
     claim = AIClaim.objects.get()
     assert claim.claim_type == "info_completion"
     assert claim.status == AIClaim.Status.ACCEPTED
-    assert claim.calibrated_confidence == pytest.approx(0.81)
+    assert float(claim.calibrated_confidence) == pytest.approx(0.81)
     assert ClaimEvidence.objects.filter(claim=claim, observation=observation).exists()
     name = EntityName.objects.get(entity=entity, language="zh")
     assert name.text == "命运之夜"
@@ -343,8 +343,8 @@ def test_web_evidence_raises_strength_and_persists_artifacts() -> None:
 
     assert summary["applied"] == 1
     claim = AIClaim.objects.get()
-    assert claim.evidence_strength == pytest.approx(1.0)
-    assert claim.calibrated_confidence == pytest.approx(0.9)
+    assert float(claim.evidence_strength) == pytest.approx(1.0)
+    assert float(claim.calibrated_confidence) == pytest.approx(0.9)
     assert ToolInvocation.objects.filter(tool_name="web.search").count() == 1
     artifact = SourceArtifact.objects.get(kind=SourceArtifact.Kind.SEARCH_RESULT)
     assert artifact.source_url == "https://example.org/fate"
