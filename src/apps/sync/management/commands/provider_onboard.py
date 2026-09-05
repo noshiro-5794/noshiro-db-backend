@@ -74,42 +74,39 @@ class Command(BaseCommand):
         elif options["disable"]:
             desired_enabled = False
 
-        provider, created = Provider.objects.get_or_create(
-            slug=spec.slug,
-            defaults={
-                "name": spec.name,
-                "base_url": spec.base_url,
-                "terms_url": spec.terms_url,
-                "attribution_url": spec.attribution_url,
-                "license_name": spec.license_name,
-                "is_enabled": bool(desired_enabled),
-            },
-        )
-        changes: dict[str, str] = {}
-        if created:
-            changes["name"] = spec.name
-            changes["base_url"] = spec.base_url
-            changes["terms_url"] = spec.terms_url
-            changes["attribution_url"] = spec.attribution_url
-            changes["license_name"] = spec.license_name
-            changes["is_enabled"] = str(bool(desired_enabled)).lower()
-        elif desired_enabled is not None and provider.is_enabled != desired_enabled:
-            changes["is_enabled"] = (
-                f"{str(provider.is_enabled).lower()} -> {str(desired_enabled).lower()}"
-            )
-
-        for policy_name, field_name in POLICY_FIELDS.items():
-            if policy_name not in policies:
-                continue
-            current = getattr(provider, field_name)
-            chosen = policies[policy_name]
-            if current != chosen:
-                changes[f"policy:{policy_name}"] = f"{current} -> {chosen}"
-
-        if options["terms_checked"] and provider.terms_checked_at is None:
-            changes["terms_checked_at"] = "now"
-
         if options["apply"]:
+            provider, created = Provider.objects.get_or_create(
+                slug=spec.slug,
+                defaults={
+                    "name": spec.name,
+                    "base_url": spec.base_url,
+                    "terms_url": spec.terms_url,
+                    "attribution_url": spec.attribution_url,
+                    "license_name": spec.license_name,
+                    "is_enabled": bool(desired_enabled),
+                },
+            )
+            changes: dict[str, str] = {}
+            if created:
+                changes["name"] = spec.name
+                changes["base_url"] = spec.base_url
+                changes["terms_url"] = spec.terms_url
+                changes["attribution_url"] = spec.attribution_url
+                changes["license_name"] = spec.license_name
+                changes["is_enabled"] = str(bool(desired_enabled)).lower()
+            elif desired_enabled is not None and provider.is_enabled != desired_enabled:
+                changes["is_enabled"] = (
+                    f"{str(provider.is_enabled).lower()} -> "
+                    f"{str(desired_enabled).lower()}"
+                )
+            for policy_name, field_name in POLICY_FIELDS.items():
+                if policy_name in policies:
+                    current = getattr(provider, field_name)
+                    chosen = policies[policy_name]
+                    if current != chosen:
+                        changes[f"policy:{policy_name}"] = f"{current} -> {chosen}"
+            if options["terms_checked"] and provider.terms_checked_at is None:
+                changes["terms_checked_at"] = "now"
             if options["enable"]:
                 provider.is_enabled = True
             if options["disable"]:
@@ -132,13 +129,31 @@ class Command(BaseCommand):
             )
             return
 
-        state = "would be created" if created else "exists"
-        self.stdout.write(f"[dry-run] Provider {spec.slug} {state}")
-        if changes:
-            for key, value in changes.items():
+        existing = Provider.objects.filter(slug=spec.slug).first()
+        self.stdout.write(
+            f"[dry-run] Provider {spec.slug} "
+            + ("would be created" if existing is None else "exists")
+        )
+        if existing is not None:
+            planned: dict[str, str] = {}
+            if desired_enabled is not None and existing.is_enabled != desired_enabled:
+                planned["is_enabled"] = (
+                    f"{str(existing.is_enabled).lower()} -> "
+                    f"{str(desired_enabled).lower()}"
+                )
+            for policy_name, field_name in POLICY_FIELDS.items():
+                if policy_name in policies:
+                    current = getattr(existing, field_name)
+                    if current != policies[policy_name]:
+                        planned[f"policy:{policy_name}"] = (
+                            f"{current} -> {policies[policy_name]}"
+                        )
+            if options["terms_checked"] and existing.terms_checked_at is None:
+                planned["terms_checked_at"] = "now"
+            for key, value in planned.items():
                 self.stdout.write(f"  {key}: {value}")
-        else:
-            self.stdout.write("  no changes")
+            if not planned:
+                self.stdout.write("  no changes")
         self.stdout.write(
             self.style.WARNING(
                 "Re-run with --apply to persist these changes; explicit policies "

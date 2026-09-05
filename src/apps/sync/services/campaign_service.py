@@ -677,6 +677,12 @@ class SyncCampaignService:
             params["enrichment"] = stats
             campaign.parameters = params
             campaign.save(update_fields=["parameters", "updated_at"])
+        if sample > 0:
+            processed_now = SyncWorkItem.objects.filter(
+                campaign=campaign, ai_enriched_at__isnull=False
+            ).count()
+            if processed_now >= sample:
+                return True
         return not SyncWorkItem.objects.filter(
             campaign=campaign,
             status=SyncWorkItem.Status.SUCCEEDED,
