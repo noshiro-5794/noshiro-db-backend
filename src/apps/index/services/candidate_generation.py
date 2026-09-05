@@ -34,18 +34,31 @@ class ProviderCandidateService:
             "created_ids": [],
             "pairs": [],
         }
-        for source in source_names:
+        entities: dict[str, list[dict[str, Any]]] = {}
+        for name_row in source_names:
+            entities.setdefault(str(name_row["entity_id"]), []).append(name_row)
+        for entity_id, names in entities.items():
             summary["anilist_entities"] += 1
-            matches = self._bangumi_matches(
-                name=source["text"],
-                min_similarity=min_similarity,
-                top_k=top_k,
-            )
-            for match in matches:
+            best: dict[str, dict[str, Any]] = {}
+            for name in names:
+                for match in self._bangumi_matches(
+                    name=name["text"],
+                    min_similarity=min_similarity,
+                    top_k=top_k,
+                ):
+                    key = str(match["entity_id"])
+                    if key not in best or match["similarity"] > best[key]["similarity"]:
+                        best[key] = {
+                            "entity_id": match["entity_id"],
+                            "text": match["text"],
+                            "similarity": match["similarity"],
+                            "source_text": name["text"],
+                        }
+            for match in best.values():
                 summary["pairs"].append(
                     {
-                        "source_entity": str(source["entity_id"]),
-                        "source_text": source["text"],
+                        "source_entity": str(entity_id),
+                        "source_text": match["source_text"],
                         "target_entity": str(match["entity_id"]),
                         "target_text": match["text"],
                         "similarity": round(float(match["similarity"]), 4),
@@ -54,9 +67,9 @@ class ProviderCandidateService:
                 if not create:
                     continue
                 created = self._create_candidate(
-                    source_entity_id=source["entity_id"],
+                    source_entity_id=entity_id,
                     target_entity_id=match["entity_id"],
-                    source_text=source["text"],
+                    source_text=match["source_text"],
                     target_text=match["text"],
                     similarity=float(match["similarity"]),
                 )
@@ -84,12 +97,7 @@ class ProviderCandidateService:
                 """
             )
             rows = cursor.fetchall()
-        seen: dict[str, dict[str, Any]] = {}
-        for entity_id, text in rows:
-            key = str(entity_id)
-            if key not in seen:
-                seen[key] = {"entity_id": entity_id, "text": text}
-        return list(seen.values())
+        return [{"entity_id": row[0], "text": row[1]} for row in rows]
 
     @staticmethod
     def _bangumi_matches(

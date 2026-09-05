@@ -58,17 +58,23 @@ def _entity(
 
 
 def test_exact_title_match_creates_candidate_with_evidence() -> None:
-    _entity(
+    anilist = _entity(
         provider_slug="anilist",
         namespace_slug="anime",
         external_id="10",
         name="Mushoku Tensei 3",
     )
+    EntityName.objects.create(
+        entity=anilist,
+        text="無職転生Ⅲ",
+        language="ja",
+        kind=EntityName.Kind.ORIGINAL,
+    )
     _entity(
         provider_slug="bangumi",
         namespace_slug="subject",
         external_id="100",
-        name="Mushoku Tensei 3",
+        name="無職転生Ⅲ",
         make_work=True,
     )
 
