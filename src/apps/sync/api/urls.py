@@ -9,8 +9,22 @@ from apps.sync.api.views.campaigns import (
     SyncCampaignSummaryView,
 )
 from apps.sync.api.views.import_jobs import ImportJobDetailView, ImportJobListCreateView
+from apps.sync.api.views.matching import (
+    MatchingCandidateDecideView,
+    MatchingCandidateListView,
+)
 
 urlpatterns = [
+    path(
+        "operations/matching/candidates/",
+        MatchingCandidateListView.as_view(),
+        name="matching-candidate-list",
+    ),
+    path(
+        "operations/matching/candidates/<uuid:candidate_id>/decide/",
+        MatchingCandidateDecideView.as_view(),
+        name="matching-candidate-decide",
+    ),
     path(
         "operations/import-jobs/",
         ImportJobListCreateView.as_view(),

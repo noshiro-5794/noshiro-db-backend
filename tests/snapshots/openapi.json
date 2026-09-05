@@ -5081,6 +5081,92 @@
                 }
             }
         },
+        "/api/v1/operations/matching/candidates/": {
+            "get": {
+                "operationId": "get_api_v1_operations_matching_candidates",
+                "description": "Paginated cross-provider identity candidates for admin review.",
+                "tags": [
+                    "v1"
+                ],
+                "security": [
+                    {
+                        "jwtAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/MatchCandidate"
+                                    }
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v1/operations/matching/candidates/{candidate_id}/decide/": {
+            "post": {
+                "operationId": "post_api_v1_operations_matching_candidates_by_candidate_id_decide",
+                "description": "Admin decision that binds or rejects an identity candidate.",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "candidate_id",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "v1"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/MatchingCandidateDecide"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/MatchingCandidateDecide"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/MatchingCandidateDecide"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "jwtAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/MatchCandidate"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
         "/api/v1/operations/sync/": {
             "get": {
                 "operationId": "get_api_v1_operations_sync",
@@ -11959,6 +12045,101 @@
                     "has_liked"
                 ]
             },
+            "MatchCandidate": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "readOnly": true
+                    },
+                    "left_entity": {
+                        "type": "string",
+                        "format": "uuid",
+                        "readOnly": true
+                    },
+                    "right_entity": {
+                        "type": "string",
+                        "format": "uuid",
+                        "readOnly": true
+                    },
+                    "policy_version": {
+                        "type": "string",
+                        "maxLength": 64
+                    },
+                    "score": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,1}(?:\\.\\d{0,4})?$"
+                    },
+                    "runner_up_margin": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,1}(?:\\.\\d{0,4})?$"
+                    },
+                    "status": {
+                        "$ref": "#/components/schemas/MatchCandidateStatusEnum"
+                    },
+                    "hard_conflicts": {},
+                    "evidence_count": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "latest_proposal": {
+                        "type": "object",
+                        "additionalProperties": {},
+                        "nullable": true,
+                        "readOnly": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    },
+                    "updated_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "created_at",
+                    "evidence_count",
+                    "id",
+                    "latest_proposal",
+                    "left_entity",
+                    "policy_version",
+                    "right_entity",
+                    "score",
+                    "updated_at"
+                ]
+            },
+            "MatchCandidateStatusEnum": {
+                "enum": [
+                    "pending",
+                    "accepted",
+                    "rejected",
+                    "abstained"
+                ],
+                "type": "string",
+                "description": "* `pending` - Pending\n* `accepted` - Accepted\n* `rejected` - Rejected\n* `abstained` - Abstained"
+            },
+            "MatchingCandidateDecide": {
+                "type": "object",
+                "properties": {
+                    "outcome": {
+                        "$ref": "#/components/schemas/OutcomeEnum"
+                    },
+                    "reason": {
+                        "type": "string",
+                        "maxLength": 2000
+                    }
+                },
+                "required": [
+                    "outcome",
+                    "reason"
+                ]
+            },
             "NotificationResponse": {
                 "type": "object",
                 "properties": {
@@ -12033,6 +12214,15 @@
                 "enum": [
                     null
                 ]
+            },
+            "OutcomeEnum": {
+                "enum": [
+                    "bind",
+                    "reject",
+                    "abstain"
+                ],
+                "type": "string",
+                "description": "* `bind` - bind\n* `reject` - reject\n* `abstain` - abstain"
             },
             "PaginatedCollection": {
                 "type": "object",

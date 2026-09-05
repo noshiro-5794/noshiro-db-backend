@@ -78,6 +78,8 @@ are exposed through:
 GET  /api/v1/operations/sync/
 POST /api/v1/operations/sync/
 GET  /api/v1/operations/sync/summary/
+GET  /api/v1/operations/matching/candidates/
+POST /api/v1/operations/matching/candidates/{candidate_id}/decide/
 GET  /api/v1/operations/sync/{campaign_id}/
 GET  /api/v1/operations/sync/{campaign_id}/items/
 GET  /api/v1/operations/sync/{campaign_id}/claims/
