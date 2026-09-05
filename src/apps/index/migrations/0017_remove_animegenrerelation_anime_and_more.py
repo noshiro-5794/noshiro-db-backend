@@ -8,6 +8,7 @@ class Migration(migrations.Migration):
     dependencies = [
         ('index', '0016_term_alias'),
         ('users', '0020_remove_usersubject_uq_user_subject_and_more'),
+        ('community', '0007_remove_communitypost_ck_c_post_type_target_and_more'),
     ]
 
     operations = [
