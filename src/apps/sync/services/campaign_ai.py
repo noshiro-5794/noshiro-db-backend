@@ -148,8 +148,10 @@ class SyncAIService:
         normalized = {}
         if context.observation is not None:
             normalized = context.observation.normalized_data or {}
-        original_name = str(normalized.get("title") or "")
-        preferred_name = str(normalized.get("title_cn") or "")
+        original_name = str(normalized.get("title") or normalized.get("name") or "")
+        preferred_name = str(
+            normalized.get("title_cn") or normalized.get("name_cn") or ""
+        )
         if not preferred_name:
             preferred_name = next(iter(names.values()), "")
         release_date = str(normalized.get("date") or "")
