@@ -178,3 +178,47 @@ def test_audit_is_clean_when_latest_view_matches_stored() -> None:
     drift = relation_drift_service.audit_record(record=relation_record)
 
     assert drift == []
+
+
+def test_legacy_generic_type_is_not_reported_when_raw_matches_latest() -> None:
+    provider = Provider.objects.create(slug="bangumi", name="Bangumi")
+    _, source_entity = _entity(
+        provider=provider,
+        namespace_slug=BANGUMI_SUBJECT_NAMESPACE.slug,
+        external_id="100",
+    )
+    _, target = _entity(
+        provider=provider,
+        namespace_slug=BANGUMI_SUBJECT_NAMESPACE.slug,
+        external_id="200",
+    )
+    relation_record = ProviderRecord.objects.create(
+        namespace=ProviderNamespace.objects.create(
+            provider=provider,
+            slug=BANGUMI_SUBJECT_RELATIONS_NAMESPACE.slug,
+            resource_type=ProviderNamespace.ResourceType.COLLECTION,
+        ),
+        external_id="100",
+        origin="api",
+        status="active",
+    )
+    latest = _observation(
+        relation_record=relation_record,
+        items=[{"id": 200, "relation": "衍生"}],
+        minutes_ago=1,
+    )
+    legacy, _ = EntityRelation.objects.get_or_create(
+        from_entity=source_entity,
+        to_entity=target,
+        relation_type="related",
+    )
+    EntityRelationEvidence.objects.create(
+        relation=legacy,
+        observation=latest,
+        json_pointer="/items/0",
+        raw_relation="衍生",
+    )
+
+    drift = relation_drift_service.audit_record(record=relation_record)
+
+    assert drift == []

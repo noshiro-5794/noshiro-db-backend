@@ -54,10 +54,14 @@ class RelationDriftService:
         stored = self._stored_relations(record)
         newest: dict[tuple[str, str], tuple[str, str]] = {}
         for to_entity_id, relation_type, raw, observed_at in stored:
-            newest[(str(to_entity_id), relation_type)] = (raw or "", str(observed_at))
+            canonical = (
+                canonical_relation_type("bangumi", raw) if raw else relation_type
+            )
+            key = (str(to_entity_id), canonical)
+            newest[key] = (raw or "", str(observed_at))
         drift: list[RelationDrift] = []
-        for (to_entity_id, relation_type), (raw, observed_at) in newest.items():
-            if (to_entity_id, relation_type) in expected:
+        for (to_entity_id, canonical), (raw, observed_at) in newest.items():
+            if (to_entity_id, canonical) in expected:
                 continue
             target = (
                 ProviderRepresentation.objects.filter(
@@ -73,7 +77,7 @@ class RelationDriftService:
                 RelationDrift(
                     external_id=record.external_id,
                     target_external_id=target or "",
-                    relation_type=relation_type,
+                    relation_type=canonical,
                     raw_relation=raw,
                     last_seen_at=observed_at,
                 )
