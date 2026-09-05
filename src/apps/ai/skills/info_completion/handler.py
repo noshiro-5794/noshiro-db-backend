@@ -228,7 +228,7 @@ class InfoCompletionSkill:
                 {
                     "title": artifact.metadata.get("title", ""),
                     "url": artifact.source_url,
-                    "content": artifact.excerpt[:2000],
+                    "content": artifact.excerpt[:700],
                 }
                 for artifact in web_artifacts
             ],
