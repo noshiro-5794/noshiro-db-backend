@@ -423,6 +423,7 @@ WEB_SEARCH_BASE_URL = env(
     default="https://api.tavily.com",
 )
 WEB_SEARCH_TIMEOUT = env.float("WEB_SEARCH_TIMEOUT", default=20)
+WEB_SEARCH_CACHE_DAYS = env.int("WEB_SEARCH_CACHE_DAYS", default=30)
 WEB_FETCH_TIMEOUT = env.float("WEB_FETCH_TIMEOUT", default=20)
 WEB_FETCH_MAX_BYTES = env.int("WEB_FETCH_MAX_BYTES", default=65536)
 

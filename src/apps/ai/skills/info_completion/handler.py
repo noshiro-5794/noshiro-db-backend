@@ -6,8 +6,10 @@ import hashlib
 import json
 import logging
 import re
+from datetime import timedelta
 from typing import Any
 
+from django.conf import settings
 from django.utils import timezone
 
 from apps.ai.models import (
@@ -151,6 +153,9 @@ class InfoCompletionSkill:
         if not query.strip():
             return ()
         parameters = {"query": query, "max_results": 5}
+        cached = self._cached_search_artifacts(tool=tool, parameters=parameters)
+        if cached is not None:
+            return cached
         step = AgentStep.objects.create(
             run=agent_run,
             sequence=self._next_sequence(agent_run),
@@ -214,6 +219,30 @@ class InfoCompletionSkill:
                 )
             )
         return tuple(artifacts)
+
+    def _cached_search_artifacts(
+        self, *, tool, parameters: dict[str, Any]
+    ) -> tuple[SourceArtifact, ...] | None:
+        """Reuse a recent identical web search instead of spending quota again."""
+        parameter_hash = _payload_hash(parameters)
+        cutoff = timezone.now() - timedelta(days=max(0, settings.WEB_SEARCH_CACHE_DAYS))
+        recent = (
+            ToolInvocation.objects.filter(
+                tool_name=tool.name,
+                tool_version=tool.version,
+                parameter_hash=parameter_hash,
+                status=ToolInvocation.Status.SUCCEEDED,
+                finished_at__gte=cutoff,
+            )
+            .order_by("-finished_at")
+            .first()
+        )
+        if recent is None:
+            return None
+        artifacts = tuple(
+            SourceArtifact.objects.filter(tool_invocation=recent).order_by("created_at")
+        )
+        return artifacts or None
 
     def _model_result(
         self,

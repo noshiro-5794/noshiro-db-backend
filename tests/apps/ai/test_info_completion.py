@@ -349,3 +349,66 @@ def test_web_evidence_raises_strength_and_persists_artifacts() -> None:
     artifact = SourceArtifact.objects.get(kind=SourceArtifact.Kind.SEARCH_RESULT)
     assert artifact.source_url == "https://example.org/fate"
     assert ClaimEvidence.objects.filter(claim=claim, artifact=artifact).exists()
+
+
+@override_settings(WEB_SEARCH_CACHE_DAYS=30)
+def test_web_search_results_are_reused_within_cache_window() -> None:
+    entity, _observation, _run = _fixture()
+    registry = ToolRegistry()
+    calls = {"n": 0}
+
+    def fake_search(_value: WebSearchInput) -> WebSearchOutput:
+        calls["n"] += 1
+        return WebSearchOutput(
+            available=True,
+            results=[
+                {
+                    "title": "命运之夜",
+                    "url": "https://example.org/fate",
+                    "content": "Fate/stay night 的中文译名是命运之夜。",
+                    "score": 0.9,
+                }
+            ],
+        )
+
+    registry.register(
+        ToolDefinition(
+            name="web.search",
+            description="test",
+            input_model=WebSearchInput,
+            output_model=WebSearchOutput,
+            handler=fake_search,
+            version="1.0.0",
+            records_evidence=True,
+        )
+    )
+
+    def gather(run: AgentRun):
+        with patch(
+            "apps.ai.skills.info_completion.handler.create_default_tool_registry",
+            return_value=registry,
+        ):
+            return info_completion_skill._gather_web_evidence(
+                value=_input(entity), agent_run=run
+            )
+
+    run1 = AgentRun.objects.create(
+        kind=AgentRun.Kind.ADMIN_SYNC,
+        title="cache-1",
+        idempotency_key="cache-1",
+        idempotency_scope="cache-test",
+    )
+    run2 = AgentRun.objects.create(
+        kind=AgentRun.Kind.ADMIN_SYNC,
+        title="cache-2",
+        idempotency_key="cache-2",
+        idempotency_scope="cache-test",
+    )
+
+    first = gather(run1)
+    second = gather(run2)
+
+    assert len(first) == len(second) == 1
+    assert first[0].pk == second[0].pk
+    assert calls["n"] == 1
+    assert ToolInvocation.objects.filter(tool_name="web.search").count() == 1
