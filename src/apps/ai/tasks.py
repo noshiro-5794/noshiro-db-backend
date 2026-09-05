@@ -9,6 +9,8 @@ from integrations.ai import AIProviderError
     retry_backoff=True,
     retry_jitter=True,
     max_retries=3,
+    soft_time_limit=180,
+    time_limit=210,
 )
 def evaluate_match_candidate_task(candidate_id: str) -> str:
     proposal = ai_matching_service.evaluate(candidate_id=candidate_id)
@@ -20,6 +22,8 @@ def evaluate_match_candidate_task(candidate_id: str) -> str:
     retry_backoff=True,
     retry_jitter=True,
     max_retries=3,
+    soft_time_limit=180,
+    time_limit=210,
 )
 def classify_entity_task(entity_id: str) -> str:
     proposal = ai_knowledge_proposal_service.classify_entity(entity_id=entity_id)
@@ -31,6 +35,8 @@ def classify_entity_task(entity_id: str) -> str:
     retry_backoff=True,
     retry_jitter=True,
     max_retries=3,
+    soft_time_limit=180,
+    time_limit=210,
 )
 def extract_observation_evidence_task(observation_id: str, entity_id: str) -> str:
     proposal = ai_knowledge_proposal_service.extract_evidence(

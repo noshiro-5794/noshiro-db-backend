@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from django.core.management.base import BaseCommand
 
-from apps.ai.tasks import evaluate_match_candidate_task
 from apps.index.services import provider_candidate_service
+from config.celery import app as celery_app
+
+EVALUATE_TASK = "apps.ai.tasks.evaluate_match_candidate_task"
 
 
 class Command(BaseCommand):
@@ -41,7 +43,11 @@ class Command(BaseCommand):
         )
         if options["evaluate"] and not options["dry_run"]:
             for candidate_id in summary["created_ids"]:
-                evaluate_match_candidate_task.delay(str(candidate_id))
+                celery_app.send_task(
+                    EVALUATE_TASK,
+                    args=[str(candidate_id)],
+                    queue="ai",
+                )
 
         mode = "dry-run" if options["dry_run"] else "created"
         self.stdout.write(
