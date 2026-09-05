@@ -398,12 +398,12 @@ AI_AGENT_API_KEY = env("AI_AGENT_API_KEY", default=None)
 
 AI_PRIMARY_MODEL = env(
     "AI_PRIMARY_MODEL",
-    default="zai-org/GLM-5.2",
+    default="zai-org/GLM-5.3",
 )
 
 AI_FAST_MODEL = env(
     "AI_FAST_MODEL",
-    default="deepseek-ai/DeepSeek-V4-Flash-0731",
+    default="deepseek-ai/DeepSeek-V4-Flash",
 )
 
 AI_REASONING_MODEL = env(

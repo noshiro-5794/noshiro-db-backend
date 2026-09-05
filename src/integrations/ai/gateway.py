@@ -9,14 +9,14 @@ from integrations.ai.exceptions import AIProviderError
 from shared.outbound import httpx_client_kwargs
 
 _MODEL_ROUTING: dict[str, str] = {
-    "entity_matching": "AI_PRIMARY_MODEL",
+    "entity_matching": "AI_REASONING_MODEL",
     "entity_classification": "AI_FAST_MODEL",
-    "evidence_extraction": "AI_PRIMARY_MODEL",
-    "conflict_detection": "AI_PRIMARY_MODEL",
-    "info_completion": "AI_PRIMARY_MODEL",
+    "evidence_extraction": "AI_FAST_MODEL",
+    "conflict_detection": "AI_REASONING_MODEL",
+    "info_completion": "AI_FAST_MODEL",
     "field_normalization": "AI_FAST_MODEL",
-    "knowledge_qa": "AI_PRIMARY_MODEL",
-    "user_agent": "AI_PRIMARY_MODEL",
+    "knowledge_qa": "AI_FAST_MODEL",
+    "user_agent": "AI_FAST_MODEL",
 }
 
 _CLASSIFICATION_FALLBACK_THRESHOLD = Decimal("0.85")
