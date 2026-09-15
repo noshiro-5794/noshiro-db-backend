@@ -7,7 +7,7 @@ x-app-environment: &app-environment
   HTTPS_PROXY: ${OUTBOUND_PROXY_URL:-}
   NO_PROXY: localhost,127.0.0.1,postgres,redis-broker,redis-cache,minio,${OUTBOUND_NO_PROXY_HOSTS:-}
 
-x-app-image: &app-image "${APP_IMAGE:-noshiro-db-backend}:${APP_IMAGE_TAG:-local}"
+x-app-image: &app-image "${APP_IMAGE:-noshiro-db/backend}:${APP_IMAGE_TAG:-local}"
 
 services:
   web:
