@@ -1,3 +1,4 @@
+from datetime import date
 from unittest.mock import patch
 
 import pytest
@@ -8,10 +9,34 @@ from apps.sync.providers.anilist import (
     ANILIST_SEASON_NAMESPACE,
     anilist_client,
 )
-from apps.sync.services.anilist_season_service import anilist_season_service
+from apps.sync.services.anilist_season_service import (
+    anilist_season_service,
+    current_anilist_season,
+)
 from apps.sync.services.schedule_coverage_service import schedule_coverage_service
 
 pytestmark = pytest.mark.django_db(transaction=True)
+
+
+@pytest.mark.parametrize(
+    ("month", "season"),
+    [
+        (1, "WINTER"),
+        (3, "WINTER"),
+        (4, "SPRING"),
+        (6, "SPRING"),
+        (7, "SUMMER"),
+        (9, "SUMMER"),
+        (10, "FALL"),
+        (12, "FALL"),
+    ],
+)
+def test_current_anilist_season_mapping(month: int, season: str) -> None:
+    with patch(
+        "apps.sync.services.anilist_season_service.timezone.localdate",
+        return_value=date(2026, month, 15),
+    ):
+        assert current_anilist_season() == (season, 2026)
 
 
 def _season_page(*, has_next: bool = False) -> dict:

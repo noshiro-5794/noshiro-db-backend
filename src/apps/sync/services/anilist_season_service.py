@@ -140,10 +140,10 @@ def current_anilist_season() -> tuple[str, int]:
     """Return AniList season name/year for the local broadcast quarter."""
     today = timezone.localdate()
     month = today.month
-    if month in {12, 1, 2}:
+    if month in {1, 2, 3}:
         return "WINTER", today.year
-    if month in {3, 4, 5}:
+    if month in {4, 5, 6}:
         return "SPRING", today.year
-    if month in {6, 7, 8}:
+    if month in {7, 8, 9}:
         return "SUMMER", today.year
     return "FALL", today.year
