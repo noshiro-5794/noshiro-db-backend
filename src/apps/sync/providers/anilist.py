@@ -133,7 +133,7 @@ class AniListClient:
           nextAiringEpisode { airingAt episode }
           title { romaji english native userPreferred }
           coverImage { extraLarge large medium color }
-          airingSchedule(perPage: 10) {
+          airingSchedule(perPage: 50) {
             nodes { id episode airingAt timeUntilAiring }
           }
         }
