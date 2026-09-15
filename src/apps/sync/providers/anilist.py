@@ -140,6 +140,34 @@ class AniListClient:
       }
     }
     """
+    AIRING_QUERY = """
+    query ($page: Int!, $perPage: Int!) {
+      Page(page: $page, perPage: $perPage) {
+        pageInfo { hasNextPage total }
+        media(type: ANIME, status: RELEASING, sort: [ID]) {
+          id
+          idMal
+          type
+          format
+          status
+          season
+          seasonYear
+          episodes
+          duration
+          isAdult
+          siteUrl
+          startDate { year month day }
+          endDate { year month day }
+          nextAiringEpisode { airingAt episode }
+          title { romaji english native userPreferred }
+          coverImage { extraLarge large medium color }
+          airingSchedule(perPage: 50) {
+            nodes { id episode airingAt timeUntilAiring }
+          }
+        }
+      }
+    }
+    """
     MEDIA_QUERY = """
     query ($id: Int, $page: Int, $perPage: Int) {
       Media(id: $id, type: ANIME) {
@@ -344,6 +372,26 @@ class AniListClient:
         page_data = data.get("Page")
         if not isinstance(page_data, dict):
             raise AniListAPIError("AniList returned an invalid season page.")
+        return page_data
+
+    def fetch_airing_page(
+        self,
+        *,
+        cursor: str | None = None,
+        page_size: int = 50,
+    ) -> dict[str, Any]:
+        """Return one page of every currently releasing anime."""
+        page = max(1, int(cursor or "1"))
+        data = self._post(
+            self.AIRING_QUERY,
+            {
+                "page": page,
+                "perPage": min(max(page_size, 1), 50),
+            },
+        )
+        page_data = data.get("Page")
+        if not isinstance(page_data, dict):
+            raise AniListAPIError("AniList returned an invalid airing page.")
         return page_data
 
     def discover_anime_page(

@@ -57,7 +57,7 @@ class SeasonPipelineService:
 
     def _run_anilist_leg(self, max_items: int | None) -> dict[str, Any]:
         """Refresh the AniList season snapshot, then promote its saved items."""
-        snapshot = anilist_season_service.sync_current_season()
+        snapshot = anilist_season_service.sync_current_airing()
         imported = self._promote_anilist_records(max_items=max_items)
         candidates = self._generate_anilist_candidates()
         candidate_ids = list(candidates.get("created_ids") or [])

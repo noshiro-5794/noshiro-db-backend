@@ -34,7 +34,7 @@ class Command(BaseCommand):
                 max_pages=options["max_pages"],
             )
         else:
-            result = anilist_season_service.sync_current_season(
+            result = anilist_season_service.sync_current_airing(
                 page_size=options["page_size"],
                 max_pages=options["max_pages"],
             )

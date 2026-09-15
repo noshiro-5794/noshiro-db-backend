@@ -85,7 +85,7 @@ def test_generate_match_candidates_supports_mal_source() -> None:
 
 def test_sync_anilist_season_command_runs_service() -> None:
     with patch(
-        "apps.sync.management.commands.sync_anilist_season.anilist_season_service.sync_current_season",
+        "apps.sync.management.commands.sync_anilist_season.anilist_season_service.sync_current_airing",
         return_value={"season_key": "fall:2026", "pages": 0},
     ) as run:
         output = _run("sync_anilist_season")

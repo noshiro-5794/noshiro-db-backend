@@ -166,3 +166,31 @@ def test_season_query_variables_are_bounded() -> None:
         "season": "FALL",
         "seasonYear": 2026,
     }
+
+
+def test_airing_query_releases_without_season_filter() -> None:
+    with patch.object(
+        anilist_client,
+        "_post",
+        return_value={"Page": _season_page()},
+    ) as post:
+        result = anilist_client.fetch_airing_page(cursor="2", page_size=50)
+
+    assert result["pageInfo"]["hasNextPage"] is False
+    assert post.call_args.args[1] == {"page": 2, "perPage": 50}
+
+
+def test_current_airing_records_global_releasing_items() -> None:
+    with patch.object(anilist_client, "fetch_airing_page", return_value=_season_page()):
+        summary = anilist_season_service.sync_current_airing()
+
+    assert summary["mode"] == "airing"
+    assert summary["items_seen"] == 1
+    assert (
+        ProviderRecord.objects.filter(
+            namespace__provider__slug="anilist",
+            namespace__slug=ANILIST_SEASON_NAMESPACE.slug,
+            external_id="airing:current",
+        ).count()
+        == 1
+    )

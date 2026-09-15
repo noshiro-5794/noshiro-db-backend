@@ -20,7 +20,7 @@ def test_run_chains_anilist_promotion_candidates_and_mal_pipeline() -> None:
             "_dispatch_ai_evaluations",
         ) as dispatch,
         patch(
-            "apps.sync.services.season_pipeline_service.anilist_season_service.sync_current_season",
+            "apps.sync.services.season_pipeline_service.anilist_season_service.sync_current_airing",
             return_value={"season_key": "fall:2026"},
         ),
         patch(
@@ -71,7 +71,7 @@ def test_anilist_maintenance_does_not_block_mal_leg() -> None:
             "_generate_anilist_candidates",
         ) as generate_candidates,
         patch(
-            "apps.sync.services.season_pipeline_service.anilist_season_service.sync_current_season",
+            "apps.sync.services.season_pipeline_service.anilist_season_service.sync_current_airing",
             side_effect=maintenance_error,
         ) as sync_season,
         patch(
