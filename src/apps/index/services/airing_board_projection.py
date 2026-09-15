@@ -14,6 +14,7 @@ from decimal import Decimal
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
@@ -21,6 +22,7 @@ from apps.index.models import (
     AiringBoard,
     AiringBoardEntry,
     AiringEvent,
+    AnimeProfile,
     Entity,
     Observation,
     ProviderRepresentation,
@@ -40,12 +42,19 @@ _WEEKDAY_MAP = {
     "sunday": 7,
 }
 
-# MAL is the authoritative source for the current-season board: its official
-# v2 seasonal listing carries the broadcast day/time for every airing entry,
-# and this project treats MAL as the identity spine. AniList and Bangumi
-# corroborate slots; when sources disagree on the same canonical work, the
-# lower-priority source only appears if the leader is absent for that work/day.
-_SOURCE_PRIORITY = {"mal": 0, "anilist": 1, "bangumi": 2}
+# Source roles are field-level rather than provider-level:
+# * AniList owns the precise per-episode instant (airingAt);
+# * MAL owns the weekly broadcast slot and is the identity spine;
+# * Bangumi is the coverage fallback for works absent from both.
+_MINUTE_SOURCE_PRIORITY = {"anilist": 0, "mal": 1, "bangumi": 2}
+_WEEKDAY_SOURCE_PRIORITY = {"mal": 0, "anilist": 1, "bangumi": 2}
+_DEFAULT_ALLOWED_FORMATS = ("TV", "TV_SHORT", "ONA")
+_FORMAT_ALIASES = {
+    "TV": "TV",
+    "TV_SHORT": "TV_SHORT",
+    "ONA": "ONA",
+    "WEB": "ONA",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,6 +70,7 @@ class CandidateBar:
     precision: str = AiringBoardEntry.Precision.WEEKDAY
     status: str = AiringBoardEntry.Status.TENTATIVE
     provider: str = ""
+    format: str = ""
     observation_id: Any = None
     external_id: str = ""
 
@@ -79,7 +89,7 @@ class AiringBoardProjectionService:
                 season_key=board.season_key,
                 item_count=len(entries),
                 metadata={
-                    "projection": "multisource",
+                    "projection": "field-fusion-v2",
                     "candidate_count": len(candidates),
                     "generated_at": timezone.now().isoformat(),
                 },
@@ -117,9 +127,12 @@ class AiringBoardProjectionService:
     def _candidates_for_window(self, *, season_key: str) -> list[CandidateBar]:
         now = timezone.now()
         end = now + timedelta(days=7)
+        formats = self._format_index()
         candidates: list[CandidateBar] = []
-        candidates.extend(self._bangumi_weekday_candidates())
-        candidates.extend(self._anilist_minute_candidates(now=now, end=end))
+        candidates.extend(self._bangumi_weekday_candidates(formats=formats))
+        candidates.extend(
+            self._anilist_minute_candidates(now=now, end=end, formats=formats)
+        )
         candidates.extend(
             self._mal_season_candidates(
                 now=now,
@@ -127,10 +140,20 @@ class AiringBoardProjectionService:
                 season_key=season_key,
             )
         )
-        return candidates
+        return [bar for bar in candidates if _format_allowed(bar.format)]
 
     @staticmethod
-    def _bangumi_weekday_candidates() -> list[CandidateBar]:
+    def _format_index() -> dict[Any, str]:
+        rows = AnimeProfile.objects.filter(work__entity_id__isnull=False).values_list(
+            "work__entity_id", "format"
+        )
+        return {entity_id: str(format_value or "") for entity_id, format_value in rows}
+
+    @staticmethod
+    def _bangumi_weekday_candidates(
+        *,
+        formats: dict[Any, str],
+    ) -> list[CandidateBar]:
         bars: list[CandidateBar] = []
         for event in active_airing_board_events().filter(
             precision=AiringEvent.Precision.WEEKDAY
@@ -144,6 +167,7 @@ class AiringBoardProjectionService:
                     weekday=event.weekday,
                     precision=AiringBoardEntry.Precision.WEEKDAY,
                     provider="bangumi",
+                    format=formats.get(root.id, ""),
                     observation_id=event.observation_id,
                 )
             )
@@ -154,6 +178,7 @@ class AiringBoardProjectionService:
         *,
         now: datetime,
         end: datetime,
+        formats: dict[Any, str],
     ) -> list[CandidateBar]:
         bars: list[CandidateBar] = []
         events = (
@@ -181,6 +206,7 @@ class AiringBoardProjectionService:
                     precision=AiringBoardEntry.Precision.MINUTE,
                     status=AiringBoardEntry.Status.SCHEDULED,
                     provider="anilist",
+                    format=formats.get(root.id, ""),
                     observation_id=event.observation_id,
                 )
             )
@@ -280,6 +306,7 @@ class AiringBoardProjectionService:
             ),
             status=AiringBoardEntry.Status.SCHEDULED,
             provider="mal",
+            format=str(item.get("media_type") or ""),
             observation_id=observation_id,
             external_id=str(mal_id),
         )
@@ -320,15 +347,8 @@ class AiringBoardProjectionService:
             work = Work.objects.filter(entity_id=entity_id).first()
             if work is None:
                 continue
-            chosen = min(bars, key=lambda bar: _SOURCE_PRIORITY.get(bar.provider, 99))
-            agrees = [
-                bar
-                for bar in bars
-                if bar.provider != chosen.provider
-                and bar.starts_at is not None
-                and chosen.starts_at is not None
-                and abs((bar.starts_at - chosen.starts_at).total_seconds()) <= 1800
-            ]
+            chosen = _choose_bar(bars)
+            agrees = [bar for bar in bars if _corroborates(chosen, bar)]
             source_refs = [
                 {
                     "provider": bar.provider,
@@ -343,6 +363,9 @@ class AiringBoardProjectionService:
                     "observation_id": str(bar.observation_id)
                     if bar.observation_id
                     else "",
+                    "precision": bar.precision,
+                    "starts_at": bar.starts_at.isoformat() if bar.starts_at else "",
+                    "role": _source_role(chosen=chosen, bar=bar),
                 }
                 for bar in [chosen, *agrees]
             ]
@@ -381,6 +404,58 @@ def _canonical_entity(entity: Entity) -> Entity | None:
     ):
         return None
     return root
+
+
+def _allowed_formats() -> set[str]:
+    configured = (
+        getattr(settings, "CALENDAR_ALLOWED_FORMATS", None) or _DEFAULT_ALLOWED_FORMATS
+    )
+    return {
+        _FORMAT_ALIASES.get(str(value).strip().upper(), str(value).strip().upper())
+        for value in configured
+    }
+
+
+def _format_allowed(value: Any) -> bool:
+    raw = str(value or "").strip().upper()
+    if not raw:
+        return True  # Unknown formats stay visible rather than silently dropping.
+    return _FORMAT_ALIASES.get(raw, raw) in _allowed_formats()
+
+
+def _choose_bar(bars: list[CandidateBar]) -> CandidateBar:
+    """Pick the fused bar: precise instant first, then provider role."""
+    minute_bars = [bar for bar in bars if bar.starts_at is not None]
+    if minute_bars:
+        return min(
+            minute_bars,
+            key=lambda bar: (
+                _MINUTE_SOURCE_PRIORITY.get(bar.provider, 99),
+                bar.starts_at,
+            ),
+        )
+    return min(
+        bars,
+        key=lambda bar: _WEEKDAY_SOURCE_PRIORITY.get(bar.provider, 99),
+    )
+
+
+def _corroborates(chosen: CandidateBar, other: CandidateBar) -> bool:
+    if other is chosen or other.provider == chosen.provider:
+        return False
+    if chosen.starts_at is None or other.starts_at is None:
+        return True
+    return abs((other.starts_at - chosen.starts_at).total_seconds()) <= 1800
+
+
+def _source_role(*, chosen: CandidateBar, bar: CandidateBar) -> str:
+    if bar is chosen:
+        if bar.precision == AiringBoardEntry.Precision.MINUTE:
+            return "precise" if bar.provider == "anilist" else "primary"
+        return "weekday-primary"
+    if bar.precision == AiringBoardEntry.Precision.MINUTE:
+        return "corroboration"
+    return "weekday-corroboration"
 
 
 def _next_occurrence(

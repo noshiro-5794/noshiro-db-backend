@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -19,6 +19,12 @@ from apps.index.models import (
 from apps.index.services import (
     airing_board_projection_service,
     knowledge_ingestion_service,
+)
+from apps.index.services.airing_board_projection import (
+    CandidateBar,
+    _choose_bar,
+    _corroborates,
+    _format_allowed,
 )
 from apps.sync.providers.contracts import (
     CatalogSourceSpec,
@@ -181,3 +187,33 @@ def test_rebuild_includes_not_yet_aired_premiere_inside_window() -> None:
     assert entry.work_id == entity.id
     assert entry.starts_at is not None
     assert entry.precision == AiringBoardEntry.Precision.MINUTE
+
+
+def test_candidate_fusion_prefers_anilist_minute_and_keeps_mal_evidence() -> None:
+    slot = datetime(2026, 9, 16, 13, 0, tzinfo=UTC)
+    mal = CandidateBar(
+        entity_id="work",
+        weekday=3,
+        starts_at=slot,
+        precision=AiringBoardEntry.Precision.MINUTE,
+        provider="mal",
+    )
+    anilist = CandidateBar(
+        entity_id="work",
+        weekday=3,
+        starts_at=slot + timedelta(minutes=5),
+        precision=AiringBoardEntry.Precision.MINUTE,
+        provider="anilist",
+    )
+
+    chosen = _choose_bar([mal, anilist])
+
+    assert chosen is anilist
+    assert _corroborates(chosen, mal) is True
+
+
+def test_format_filter_excludes_music_but_allows_tv_and_unknown() -> None:
+    assert _format_allowed("TV") is True
+    assert _format_allowed("tv") is True
+    assert _format_allowed("") is True
+    assert _format_allowed("MUSIC") is False
