@@ -1,3 +1,5 @@
+name: noshiro-db
+
 services:
   postgres:
     image: postgres:15.18-bookworm

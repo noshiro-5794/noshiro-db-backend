@@ -1,3 +1,5 @@
+name: noshiro-db
+
 x-app-environment: &app-environment
   TZ: ${TZ:-Asia/Shanghai}
   OUTBOUND_PROXY_URL: ${OUTBOUND_PROXY_URL:-}

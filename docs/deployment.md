@@ -1,10 +1,10 @@
 # Deployment
 
-Production uses two Compose projects:
+Production runs one Compose project (`noshiro-db`) assembled from two files:
 
 ```text
-noshiro-infra  postgres, redis-broker, redis-cache, minio
-noshiro-app    web, worker-realtime, worker-ai, worker-sync, beat, mcp
+docker-compose.infra.yml  postgres, redis-broker, redis-cache, minio
+docker-compose.app.yml    web, worker-realtime, worker-ai, worker-sync, beat, mcp
 ```
 
 They share the `noshiro_net` Docker network. Application containers reach
