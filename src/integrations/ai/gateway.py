@@ -12,11 +12,11 @@ from integrations.ai.exceptions import AIProviderError
 from shared.outbound import httpx_client_kwargs
 
 _MODEL_ROUTING: dict[str, str] = {
-    "entity_matching": "AI_REASONING_MODEL",
+    "entity_matching": "AI_FAST_MODEL",
     "entity_classification": "AI_FAST_MODEL",
-    "bangumi_link_search": "AI_REASONING_MODEL",
+    "bangumi_link_search": "AI_FAST_MODEL",
     "evidence_extraction": "AI_FAST_MODEL",
-    "conflict_detection": "AI_REASONING_MODEL",
+    "conflict_detection": "AI_FAST_MODEL",
     "info_completion": "AI_FAST_MODEL",
     "field_normalization": "AI_FAST_MODEL",
     "knowledge_qa": "AI_FAST_MODEL",

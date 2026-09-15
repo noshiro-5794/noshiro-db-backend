@@ -22,9 +22,9 @@ class TestResolveModel:
         model = ai_gateway.resolve_model("nonexistent")
         assert model == settings.AI_PRIMARY_MODEL
 
-    @override_settings(AI_REASONING_MODEL="custom-reasoning")
-    def test_matching_use_case_uses_reasoning_tier(self) -> None:
-        assert ai_gateway.resolve_model("entity_matching") == "custom-reasoning"
+    @override_settings(AI_FAST_MODEL="custom-fast")
+    def test_matching_use_case_uses_fast_tier(self) -> None:
+        assert ai_gateway.resolve_model("entity_matching") == "custom-fast"
 
     @override_settings(AI_FAST_MODEL="custom-fast")
     def test_completion_use_case_uses_fast_tier(self) -> None:
