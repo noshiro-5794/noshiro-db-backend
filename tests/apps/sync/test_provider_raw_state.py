@@ -1,4 +1,5 @@
 from io import StringIO
+from unittest.mock import patch
 
 import pytest
 from django.core.management import call_command
@@ -21,6 +22,9 @@ from apps.sync.services.provider_raw_policy import (
 )
 from apps.sync.services.provider_raw_state_service import (
     provider_raw_state_service,
+)
+from apps.sync.services.provider_stub_backfill_service import (
+    provider_stub_backfill_service,
 )
 from apps.sync.services.source_record_service import source_record_service
 
@@ -173,3 +177,24 @@ def test_source_record_service_marks_raw_state_on_write() -> None:
     assert slim.record.raw_state == ProviderRecord.RawState.SLIM
     assert raw.record.raw_state == ProviderRecord.RawState.RAW
     assert stub.raw_state == ProviderRecord.RawState.STUB
+
+
+def test_stub_backfill_dry_run_then_fetches_anilist_anime() -> None:
+    _record(
+        provider_slug="anilist",
+        namespace_slug="anime",
+        external_id="178789",
+    )
+
+    dry_run = provider_stub_backfill_service.backfill(apply=False)
+    assert dry_run["candidates"] == 1
+    assert dry_run["backfilled"] == 0
+
+    with patch(
+        "apps.sync.services.provider_stub_backfill_service."
+        "anilist_import_service.import_media"
+    ) as import_media:
+        applied = provider_stub_backfill_service.backfill(apply=True)
+
+    import_media.assert_called_once_with(178789)
+    assert applied["backfilled"] == 1
