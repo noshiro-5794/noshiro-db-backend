@@ -31,6 +31,11 @@ class Command(BaseCommand):
         result = {
             "classification": provider_raw_state_service.classify(apply=apply),
             "report": provider_raw_state_service.report(),
+            "superseded_anilist_seasons": (
+                provider_raw_state_service.repair_superseded_anilist_seasons(
+                    apply=apply
+                )
+            ),
         }
         if options["repair_mal_legacy"]:
             result["mal_legacy"] = provider_raw_state_service.repair_mal_legacy(
