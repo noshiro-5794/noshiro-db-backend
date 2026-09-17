@@ -1,7 +1,8 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import pytest
+from django.test import override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
@@ -25,6 +26,7 @@ from apps.index.services.airing_board_projection import (
     _choose_bar,
     _corroborates,
     _format_allowed,
+    _season_switch_allowed,
 )
 from apps.sync.providers.contracts import (
     CatalogSourceSpec,
@@ -217,3 +219,9 @@ def test_format_filter_excludes_music_but_allows_tv_and_unknown() -> None:
     assert _format_allowed("tv") is True
     assert _format_allowed("") is True
     assert _format_allowed("MUSIC") is False
+
+
+def test_season_switch_waits_for_the_grace_period() -> None:
+    with override_settings(SEASON_SWITCH_GRACE_DAYS=3):
+        assert _season_switch_allowed("2026Q4", today=date(2026, 10, 2)) is False
+        assert _season_switch_allowed("2026Q4", today=date(2026, 10, 4)) is True

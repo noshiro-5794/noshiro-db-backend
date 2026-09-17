@@ -22,6 +22,9 @@ from apps.sync.providers.mal import (
     mal_api_client,
     season_name_for_quarter,
 )
+from apps.sync.services.provider_snapshot_retention_service import (
+    provider_snapshot_retention_service,
+)
 from apps.sync.services.source_record_service import source_record_service
 from apps.sync.services.sync_job_service import sync_job_service
 
@@ -187,6 +190,7 @@ class MALScheduleService:
             schema_name="index.schedule",
             schema_version="2",
         )
+        provider_snapshot_retention_service.retain_current(recorded.record)
         return recorded
 
     @classmethod

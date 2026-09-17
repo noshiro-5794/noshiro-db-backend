@@ -102,6 +102,12 @@ class ProviderRecord(TimestampedModel):
         DUMP = "dump", "Dump"
         MANUAL = "manual", "Manual"
 
+    class RawState(models.TextChoices):
+        RAW = "raw", "Raw payload"
+        SLIM = "slim", "Partial payload"
+        STUB = "stub", "Identity stub"
+        LEGACY = "legacy", "Legacy normalized-only"
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     namespace = models.ForeignKey(
         "ProviderNamespace",
@@ -114,6 +120,11 @@ class ProviderRecord(TimestampedModel):
         max_length=16,
         choices=Status.choices,
         default=Status.ACTIVE,
+    )
+    raw_state = models.CharField(
+        max_length=16,
+        choices=RawState.choices,
+        default=RawState.RAW,
     )
     origin = models.CharField(max_length=16, choices=Origin.choices)
     first_seen_at = models.DateTimeField(default=timezone.now)
@@ -139,6 +150,10 @@ class ProviderRecord(TimestampedModel):
             models.Index(
                 fields=["namespace", "status"],
                 name="idx_provider_record_ns_status",
+            ),
+            models.Index(
+                fields=["namespace", "raw_state"],
+                name="idx_provider_record_raw_state",
             ),
             models.Index(fields=["last_seen_at"], name="idx_provider_record_seen"),
         ]

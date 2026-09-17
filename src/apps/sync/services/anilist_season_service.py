@@ -13,6 +13,9 @@ from apps.sync.providers.anilist import (
     anilist_client,
 )
 from apps.sync.providers.contracts import FetchedSourceRecord
+from apps.sync.services.provider_snapshot_retention_service import (
+    provider_snapshot_retention_service,
+)
 from apps.sync.services.source_record_service import source_record_service
 
 
@@ -103,6 +106,7 @@ class AniListSeasonSyncService:
             schema_name="index.schedule",
             schema_version="1",
         )
+        provider_snapshot_retention_service.retain_current(recorded.record)
         item_ids = self._record_season_items(item_payloads)
         return {
             "season_key": season_key,
@@ -176,6 +180,7 @@ class AniListSeasonSyncService:
             schema_name="index.schedule",
             schema_version="1",
         )
+        provider_snapshot_retention_service.retain_current(recorded.record)
         item_ids = self._record_season_items(item_payloads)
         return {
             "season_key": season_key,

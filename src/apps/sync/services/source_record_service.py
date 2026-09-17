@@ -14,6 +14,10 @@ from apps.index.models import (
 )
 from apps.sync.exceptions import SourceCatalogConflict
 from apps.sync.providers.contracts import FetchedSourceRecord, SourceNamespaceSpec
+from apps.sync.services.provider_raw_policy import (
+    raw_state_for_namespace,
+    stub_state_for_namespace,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,6 +81,9 @@ class SourceRecordService:
                     canonical_url=(canonical_urls or {}).get(external_id, ""),
                     status=SourceRecord.Status.ACTIVE,
                     origin=origin,
+                    raw_state=stub_state_for_namespace(
+                        provider_slug=namespace_spec.source.slug
+                    ),
                     first_seen_at=now,
                     last_seen_at=now,
                 )
@@ -142,6 +149,9 @@ class SourceRecordService:
                     canonical_url=fetched.canonical_url,
                     status=SourceRecord.Status.ACTIVE,
                     origin=origin,
+                    raw_state=stub_state_for_namespace(
+                        provider_slug=namespace_spec.source.slug
+                    ),
                     first_seen_at=fetched.fetched_at or now,
                     last_seen_at=fetched.fetched_at or now,
                 )
@@ -207,6 +217,10 @@ class SourceRecordService:
             record.canonical_url = fetched.canonical_url or record.canonical_url
             record.status = SourceRecord.Status.ACTIVE
             record.origin = origin
+            record.raw_state = raw_state_for_namespace(
+                provider_slug=namespace_spec.source.slug,
+                namespace_slug=namespace_spec.slug,
+            )
             record.last_seen_at = fetched.fetched_at or now
             record.latest_payload_hash = payload_hash
             record.latest_revision = revision
@@ -224,6 +238,7 @@ class SourceRecordService:
                 "canonical_url",
                 "status",
                 "origin",
+                "raw_state",
                 "last_seen_at",
                 "latest_payload_hash",
                 "latest_revision",

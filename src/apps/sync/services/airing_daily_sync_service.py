@@ -140,6 +140,22 @@ class AiringDailySyncService:
             "state": cls._serialize_state(state) if state else None,
         }
 
+    @classmethod
+    def cancel_stale_seasons(cls, *, active_season_key: str) -> int:
+        """Retire daily-sync shards that belong to an older broadcast season."""
+        return (
+            SyncState.objects.filter(
+                task_name=cls.TASK_NAME,
+            )
+            .exclude(
+                shard__endswith=f":{active_season_key}",
+            )
+            .update(
+                status=SyncState.Status.FINISHED,
+                updated_at=timezone.now(),
+            )
+        )
+
     def sync_day(
         self,
         *,

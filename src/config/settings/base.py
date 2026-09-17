@@ -309,6 +309,14 @@ CELERY_BEAT_SCHEDULE = {
             minute=env.int("SYNC_INCREMENTAL_CRON_MINUTE", default=0),
         ),
     },
+    "season-source-refresh": {
+        "task": "apps.sync.tasks.season.run_season_pipeline_task",
+        "schedule": crontab(hour=2, minute=30),
+    },
+    "season-rollover-check": {
+        "task": "apps.sync.tasks.season.check_season_rollover_task",
+        "schedule": crontab(minute=0, hour="*/6"),
+    },
     "worker-heartbeat": {
         "task": "apps.sync.tasks.maintenance.worker_heartbeat",
         "schedule": 60.0,
@@ -495,6 +503,7 @@ CALENDAR_ALLOWED_FORMATS = env.list(
     "CALENDAR_ALLOWED_FORMATS",
     default=["TV", "TV_SHORT", "ONA"],
 )
+SEASON_SWITCH_GRACE_DAYS = env.int("SEASON_SWITCH_GRACE_DAYS", default=3)
 
 SYNC_INCREMENTAL_MAX_CONSECUTIVE_ERRORS = env.int(
     "SYNC_INCREMENTAL_MAX_CONSECUTIVE_ERRORS", default=20

@@ -117,11 +117,19 @@ class AiringBoardProjectionService:
         now = timezone.localtime()
         season_key = f"{now.year}Q{(now.month - 1) // 3 + 1}"
         if board.season_key != season_key:
-            return airing_board_service.refresh(
-                observation=board.observation,
-                season_key=season_key,
-                item_count=0,
-            )
+            if _season_switch_allowed(season_key, today=now.date()):
+                return airing_board_service.refresh(
+                    observation=board.observation,
+                    season_key=season_key,
+                    item_count=0,
+                )
+            metadata = dict(board.metadata or {})
+            metadata["rollover_pending"] = season_key
+            metadata["rollover_effective_on"] = _season_switch_date(
+                season_key
+            ).isoformat()
+            board.metadata = metadata
+            board.save(update_fields=["metadata", "updated_at"])
         return board
 
     def _candidates_for_window(self, *, season_key: str) -> list[CandidateBar]:
@@ -456,6 +464,32 @@ def _source_role(*, chosen: CandidateBar, bar: CandidateBar) -> str:
     if bar.precision == AiringBoardEntry.Precision.MINUTE:
         return "corroboration"
     return "weekday-corroboration"
+
+
+def _season_start_date(season_key: str) -> date | None:
+    value = (season_key or "").strip().upper()
+    if len(value) != 6 or value[4] != "Q" or value[-1] not in "1234":
+        return None
+    try:
+        year = int(value[:4])
+    except ValueError:
+        return None
+    quarter = int(value[-1])
+    return date(year, 1 + (quarter - 1) * 3, 1)
+
+
+def _season_switch_date(season_key: str) -> date:
+    start = _season_start_date(season_key)
+    if start is None:
+        return timezone.localdate()
+    return start + timedelta(days=int(getattr(settings, "SEASON_SWITCH_GRACE_DAYS", 3)))
+
+
+def _season_switch_allowed(season_key: str, *, today: date) -> bool:
+    start = _season_start_date(season_key)
+    if start is None:
+        return True
+    return today >= _season_switch_date(season_key)
 
 
 def _next_occurrence(

@@ -171,3 +171,28 @@ def test_daily_targets_include_board_projection_provider_records() -> None:
     assert targets[0].provider_slug == "mal"
     assert targets[0].external_id == "5114"
     assert targets[0].work_id == str(entity.id)
+
+
+def test_cancel_stale_seasons_retires_old_sync_shards() -> None:
+    old = SyncState.objects.create(
+        task_name="airing_daily",
+        shard="airing_daily:2026-09-30:2026Q3",
+        current_id=1,
+        end_id=5,
+        status=SyncState.Status.RUNNING,
+    )
+    current = SyncState.objects.create(
+        task_name="airing_daily",
+        shard="airing_daily:2026-10-04:2026Q4",
+        current_id=0,
+        end_id=5,
+        status=SyncState.Status.RUNNING,
+    )
+
+    retired = airing_daily_sync_service.cancel_stale_seasons(active_season_key="2026Q4")
+
+    assert retired == 1
+    old.refresh_from_db()
+    current.refresh_from_db()
+    assert old.status == SyncState.Status.FINISHED
+    assert current.status == SyncState.Status.RUNNING

@@ -5,6 +5,7 @@ import pytest
 
 from apps.index.models import AiringEvent, Entity, Observation, ProviderRecord, Work
 from apps.sync.providers.anilist import (
+    ANILIST_EPISODE_NAMESPACE,
     ANILIST_SEASON_ITEM_NAMESPACE,
     ANILIST_SEASON_NAMESPACE,
     anilist_client,
@@ -66,7 +67,14 @@ def _season_page(*, has_next: bool = False) -> dict:
                 },
                 "coverImage": {"extraLarge": "https://example.test/cover.jpg"},
                 "airingSchedule": {
-                    "nodes": [{"id": 1, "episode": 1, "airingAt": 1800000000}]
+                    "nodes": [
+                        {
+                            "id": 1,
+                            "episode": 1,
+                            "airingAt": 1800000000,
+                            "timeUntilAiring": 123,
+                        }
+                    ]
                 },
             }
         ],
@@ -143,6 +151,25 @@ def test_season_item_can_be_promoted_to_canonical_entity() -> None:
     work = Work.objects.get(entity=entity)
     assert work.work_type == Work.WorkType.ANIME
     assert AiringEvent.objects.filter(work=work).count() >= 1
+
+
+def test_anilist_episode_payload_drops_volatile_time_until_airing() -> None:
+    from apps.sync.services.anilist_service import anilist_import_service
+
+    with patch.object(anilist_client, "fetch_season_page", return_value=_season_page()):
+        anilist_season_service.sync_season(season="FALL", season_year=2026)
+    anilist_import_service.import_saved_media(189046)
+
+    record = ProviderRecord.objects.get(
+        namespace__provider__slug="anilist",
+        namespace__slug=ANILIST_EPISODE_NAMESPACE.slug,
+        external_id="1",
+    )
+    assert record.latest_revision.payload == {
+        "id": 1,
+        "episode": 1,
+        "airingAt": 1800000000,
+    }
 
 
 def test_season_query_variables_are_bounded() -> None:

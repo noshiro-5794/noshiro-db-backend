@@ -748,11 +748,19 @@ class AniListImportService:
     ) -> Entity:
         episode_number = self._as_int(item.get("episode"))
         external_id = item.get("id") or item.get("episode") or starts_at.isoformat()
+        # ``timeUntilAiring`` is a derived, continuously changing value. Keep
+        # only the stable identity/time fields so a refresh does not create a
+        # new revision and observation for every poll.
+        stable_item = {
+            key: item.get(key) for key in ("id", "episode", "airingAt") if key in item
+        }
+        if not stable_item:
+            stable_item = {"id": external_id, "airingAt": item.get("airingAt")}
         recorded = source_record_service.record(
             namespace_spec=ANILIST_EPISODE_NAMESPACE,
             fetched=FetchedSourceRecord(
                 external_id=str(external_id),
-                payload=item,
+                payload=stable_item,
                 canonical_url=f"https://anilist.co/anime/{parent_entity.id}",
                 schema_version="anilist-graphql",
                 mapper_version="anilist-episode-v1",
@@ -762,7 +770,7 @@ class AniListImportService:
             provider_record=recorded.record,
             mapper="anilist.episode",
             mapper_version="anilist-episode-v1",
-            normalized_data=item,
+            normalized_data=stable_item,
             schema_name="index.episode",
             schema_version="1",
         )

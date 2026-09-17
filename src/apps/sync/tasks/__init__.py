@@ -9,10 +9,14 @@ from apps.sync.tasks.manual import (
     sync_subject_by_bangumi_id_task,
     sync_subject_by_uuid_task,
 )
-from apps.sync.tasks.season import run_season_pipeline_task
+from apps.sync.tasks.season import (
+    check_season_rollover_task,
+    run_season_pipeline_task,
+)
 from apps.sync.tasks.vndb import import_vndb_work_task
 
 __all__ = (
+    "check_season_rollover_task",
     "import_anilist_media_task",
     "import_mal_media_task",
     "import_vndb_work_task",
