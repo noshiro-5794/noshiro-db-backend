@@ -6,6 +6,7 @@ from collections.abc import Callable
 from typing import Any
 
 from apps.index.models import ProviderRecord
+from apps.sync.providers.exceptions import AniListAPIError
 from apps.sync.services.anilist_service import anilist_import_service
 
 
@@ -57,6 +58,7 @@ class ProviderStubBackfillService:
         result: dict[str, Any] = {
             "candidates": len(candidates),
             "backfilled": 0,
+            "missing": 0,
             "failed": [],
             "report": report,
         }
@@ -68,6 +70,16 @@ class ProviderStubBackfillService:
                 handler(record.external_id)
                 result["backfilled"] += 1
             except Exception as exc:
+                if (
+                    isinstance(exc, AniListAPIError)
+                    and getattr(exc, "status_code", None) == 404
+                ):
+                    ProviderRecord.objects.filter(pk=record.pk).update(
+                        status=ProviderRecord.Status.MISSING,
+                        raw_state=ProviderRecord.RawState.STUB,
+                    )
+                    result["missing"] += 1
+                    continue
                 result["failed"].append(
                     {
                         "external_id": record.external_id,

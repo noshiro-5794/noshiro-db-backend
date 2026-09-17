@@ -15,6 +15,7 @@ from apps.sync.providers.anilist import (
     ANILIST_STAFF_NAMESPACE,
 )
 from apps.sync.providers.contracts import FetchedSourceRecord
+from apps.sync.providers.exceptions import AniListAPIError
 from apps.sync.providers.mal import MAL_ANIME_NAMESPACE
 from apps.sync.services.provider_raw_policy import (
     raw_state_for_namespace,
@@ -198,3 +199,22 @@ def test_stub_backfill_dry_run_then_fetches_anilist_anime() -> None:
 
     import_media.assert_called_once_with(178789)
     assert applied["backfilled"] == 1
+
+
+def test_stub_backfill_marks_upstream_404_missing() -> None:
+    record = _record(
+        provider_slug="anilist",
+        namespace_slug="anime",
+        external_id="404404",
+    )
+
+    with patch(
+        "apps.sync.services.provider_stub_backfill_service."
+        "anilist_import_service.import_media",
+        side_effect=AniListAPIError("Not Found", status_code=404),
+    ):
+        result = provider_stub_backfill_service.backfill(apply=True)
+
+    record.refresh_from_db()
+    assert result["missing"] == 1
+    assert record.status == ProviderRecord.Status.MISSING
