@@ -58,3 +58,27 @@ def test_season_rollover_archives_previous_window_and_creates_new_active() -> No
     assert snapshot is not None
     assert snapshot["board_id"] == str(new_board.id)
     assert snapshot["season_key"] == "2026Q4"
+
+
+def test_refresh_can_preserve_projection_metadata() -> None:
+    first = observation({"version": "projection"})
+    second = observation({"version": "calendar"})
+    board = airing_board_service.refresh(
+        observation=first,
+        season_key="2026Q3",
+        item_count=150,
+        metadata={"projection": "field-fusion-v2"},
+    )
+
+    refreshed = airing_board_service.refresh(
+        observation=second,
+        season_key="2026Q3",
+        item_count=111,
+        metadata={"weekday_counts": {"1": 13}},
+        preserve_projection=True,
+    )
+
+    assert refreshed.id == board.id
+    assert refreshed.observation_id == second.id
+    assert refreshed.item_count == 150
+    assert refreshed.metadata == {"projection": "field-fusion-v2"}

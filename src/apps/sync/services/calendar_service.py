@@ -354,6 +354,7 @@ class CalendarSyncService:
             season_key=season_key,
             item_count=len(airing_events),
             metadata=board_metadata,
+            preserve_projection=True,
         )
 
     @staticmethod

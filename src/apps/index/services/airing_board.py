@@ -33,6 +33,7 @@ class AiringBoardService:
         season_key: str = "",
         item_count: int = 0,
         metadata: dict[str, Any] | None = None,
+        preserve_projection: bool = False,
     ) -> AiringBoard:
         now = timezone.now()
         season = (season_key or "").strip()
@@ -44,17 +45,14 @@ class AiringBoardService:
         if active is not None:
             if (active.season_key or "").strip() == season:
                 active.observation = observation
-                active.item_count = max(0, int(item_count))
-                active.metadata = metadata or {}
                 active.effective_until = None
+                update_fields = ["observation", "effective_until", "updated_at"]
+                if not preserve_projection:
+                    active.item_count = max(0, int(item_count))
+                    active.metadata = metadata or {}
+                    update_fields[1:1] = ["item_count", "metadata"]
                 active.save(
-                    update_fields=[
-                        "observation",
-                        "item_count",
-                        "metadata",
-                        "effective_until",
-                        "updated_at",
-                    ]
+                    update_fields=update_fields,
                 )
                 return active
             active.status = AiringBoard.Status.ARCHIVED
