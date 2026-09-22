@@ -29,6 +29,7 @@ from apps.index.models import (
     AiringBoard,
     AiringBoardEntry,
     AiringEvent,
+    AnimeProfile,
     Entity,
     IndexCollection,
     MetricSnapshot,
@@ -787,6 +788,11 @@ class AiringBoardEntryListView(APIView):
         if board is None:
             return Response([])
         adult_allowed = request_allows_adult_content(request)
+        formats = dict(
+            AnimeProfile.objects.filter(work__entity_id__isnull=False).values_list(
+                "work__entity_id", "format"
+            )
+        )
         entries = (
             AiringBoardEntry.objects.filter(board=board)
             .select_related("work__entity", "episode_entity")
@@ -829,6 +835,7 @@ class AiringBoardEntryListView(APIView):
                     "weekday": entry.weekday,
                     "duration_minutes": entry.duration_minutes,
                     "precision": entry.precision,
+                    "format": str(formats.get(work_entity.id) or ""),
                     "status": entry.status,
                     "decision": entry.decision,
                     "confidence": float(entry.confidence),

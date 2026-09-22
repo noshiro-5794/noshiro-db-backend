@@ -243,6 +243,7 @@ class AiringBoardEntrySerializer(serializers.Serializer):
     weekday = serializers.IntegerField(allow_null=True, min_value=1, max_value=7)
     duration_minutes = serializers.IntegerField(allow_null=True, min_value=1)
     precision = serializers.CharField()
+    format = serializers.CharField(allow_blank=True)
     status = serializers.CharField()
     decision = serializers.CharField()
     confidence = serializers.FloatField()

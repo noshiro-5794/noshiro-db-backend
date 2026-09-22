@@ -9,6 +9,7 @@ from rest_framework.test import APIClient
 from apps.index.models import (
     AiringBoard,
     AiringBoardEntry,
+    AnimeProfile,
     Entity,
     Observation,
     Provider,
@@ -72,7 +73,9 @@ def _current_season_key() -> str:
     return f"{now.year}Q{(now.month - 1) // 3 + 1}"
 
 
-def _record_mal_season_observation(*, mal_id: int) -> ProviderRecord:
+def _record_mal_season_observation(
+    *, mal_id: int, item_overrides: dict | None = None
+) -> ProviderRecord:
     source = CatalogSourceSpec(
         slug="mal",
         name="MyAnimeList",
@@ -95,6 +98,7 @@ def _record_mal_season_observation(*, mal_id: int) -> ProviderRecord:
         "broadcast_time": "22:00",
         "timezone": "Asia/Tokyo",
         "duration_minutes": 24,
+        **(item_overrides or {}),
     }
     recorded = source_record_service.record(
         namespace_spec=season_namespace,
@@ -139,6 +143,49 @@ def test_rebuild_projects_mal_season_onto_one_board_entry() -> None:
     assert entry.source_refs[0]["provider"] == "mal"
 
 
+def test_rebuild_keeps_a_released_film_as_a_weekdayless_day_bar() -> None:
+    entity = _anime_entity(
+        provider_slug="mal",
+        namespace_slug="anime",
+        external_id="63011",
+    )
+    _record_mal_season_observation(
+        mal_id=63011,
+        item_overrides={
+            "media_type": "movie",
+            "status": "finished_airing",
+            "start_date": "2026-07-24",
+            "broadcast_day": None,
+            "broadcast_time": None,
+        },
+    )
+
+    airing_board_projection_service.rebuild()
+
+    entry = AiringBoardEntry.objects.get(work_id=entity.id)
+    assert entry.weekday is None
+    assert entry.precision == AiringBoardEntry.Precision.DAY
+    assert entry.source_refs[0]["role"] == "date-primary"
+
+
+def test_rebuild_ignores_promos_and_music_videos_in_the_season_snapshot() -> None:
+    _anime_entity(provider_slug="mal", namespace_slug="anime", external_id="64001")
+    _record_mal_season_observation(
+        mal_id=64001,
+        item_overrides={
+            "media_type": "pv",
+            "status": "finished_airing",
+            "start_date": "2026-08-01",
+            "broadcast_day": None,
+            "broadcast_time": None,
+        },
+    )
+
+    summary = airing_board_projection_service.rebuild()
+
+    assert summary["entries"] == 0
+
+
 def test_board_endpoint_returns_projected_bar() -> None:
     entity = _anime_entity(
         provider_slug="mal",
@@ -156,6 +203,36 @@ def test_board_endpoint_returns_projected_bar() -> None:
     assert payload[0]["work_id"] == str(entity.id)
     assert payload[0]["precision"] == "minute"
     assert payload[0]["work"]["id"] == str(entity.id)
+
+
+def test_board_endpoint_labels_format_for_weekdayless_extras() -> None:
+    entity = _anime_entity(
+        provider_slug="mal", namespace_slug="anime", external_id="63012"
+    )
+    AnimeProfile.objects.create(
+        work=Work.objects.get(entity=entity),
+        format="MOVIE",
+    )
+    _record_mal_season_observation(
+        mal_id=63012,
+        item_overrides={
+            "media_type": "movie",
+            "status": "finished_airing",
+            "start_date": "2026-08-12",
+            "broadcast_day": None,
+            "broadcast_time": None,
+        },
+    )
+    airing_board_projection_service.rebuild()
+
+    payload = (
+        APIClient().get("/api/v1/index/calendar/board/events/?include_work=true").json()
+    )
+
+    assert len(payload) == 1
+    assert payload[0]["weekday"] is None
+    assert payload[0]["precision"] == "day"
+    assert payload[0]["format"]
 
 
 def test_rebuild_includes_not_yet_aired_premiere_inside_window() -> None:

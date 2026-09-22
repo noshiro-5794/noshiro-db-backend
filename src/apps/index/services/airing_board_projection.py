@@ -56,6 +56,17 @@ _FORMAT_ALIASES = {
     "WEB": "ONA",
 }
 
+# Films, OVAs and specials are part of the season but have no weekly slot, so
+# the board keeps them in a separate bucket below the weekday columns instead
+# of dropping them. Promos, commercials and music videos stay out entirely.
+_EXTRA_MEDIA_FORMATS = {
+    "movie": "MOVIE",
+    "ova": "OVA",
+    "special": "SPECIAL",
+    "tv_special": "SPECIAL",
+}
+_EXTRA_STATUSES = {"currently_airing", "not_yet_aired", "finished_airing"}
+
 
 @dataclass(frozen=True, slots=True)
 class CandidateBar:
@@ -148,7 +159,13 @@ class AiringBoardProjectionService:
                 season_key=season_key,
             )
         )
-        return [bar for bar in candidates if _format_allowed(bar.format)]
+        # Weekday bars obey the TV calendar allow-list; the weekday-less extras
+        # carry their own format gate when they are built.
+        return [
+            bar
+            for bar in candidates
+            if bar.weekday is None or _format_allowed(bar.format)
+        ]
 
     @staticmethod
     def _format_index() -> dict[Any, str]:
@@ -265,12 +282,17 @@ class AiringBoardProjectionService:
         if not isinstance(mal_id, int) or mal_id not in mal_works:
             return None
         status = str(item.get("status") or "").lower().replace(" ", "_")
+        weekday = _WEEKDAY_MAP.get(str(item.get("broadcast_day") or "").strip().lower())
+        if weekday is None:
+            return _mal_extra_bar(
+                item=item,
+                entity_id=mal_works[mal_id],
+                observation_id=observation_id,
+                status=status,
+            )
         is_airing = status == "currently_airing"
         is_upcoming = status == "not_yet_aired"
         if not (is_airing or is_upcoming):
-            return None
-        weekday = _WEEKDAY_MAP.get(str(item.get("broadcast_day") or "").strip().lower())
-        if weekday is None:
             return None
         raw_time = item.get("broadcast_time")
         timezone_name = str(item.get("timezone") or "Asia/Tokyo")
@@ -345,10 +367,8 @@ class AiringBoardProjectionService:
         *,
         board: AiringBoard,
     ) -> list[AiringBoardEntry]:
-        grouped: dict[tuple[Any, int], list[CandidateBar]] = {}
+        grouped: dict[tuple[Any, int | None], list[CandidateBar]] = {}
         for bar in candidates:
-            if bar.weekday is None:
-                continue
             grouped.setdefault((bar.entity_id, bar.weekday), []).append(bar)
         entries: list[AiringBoardEntry] = []
         for (entity_id, weekday), bars in grouped.items():
@@ -400,6 +420,52 @@ class AiringBoardProjectionService:
 
 
 airing_board_projection_service = AiringBoardProjectionService()
+
+
+def _mal_extra_bar(
+    *,
+    item: dict[str, Any],
+    entity_id: Any,
+    observation_id: Any,
+    status: str,
+) -> CandidateBar | None:
+    """Build a date-only bar for a film, OVA or special in the season snapshot."""
+    format_name = _EXTRA_MEDIA_FORMATS.get(
+        str(item.get("media_type") or "").strip().lower()
+    )
+    if format_name is None or status not in _EXTRA_STATUSES:
+        return None
+    start_date = _as_date(item.get("start_date"))
+    if start_date is None:
+        return None
+    starts_at = datetime.combine(
+        start_date,
+        time(hour=0, minute=0),
+        tzinfo=ZoneInfo("Asia/Tokyo"),
+    ).astimezone(UTC)
+    return CandidateBar(
+        entity_id=entity_id,
+        weekday=None,
+        starts_at=starts_at,
+        timezone="Asia/Tokyo",
+        precision=AiringBoardEntry.Precision.DAY,
+        status=AiringBoardEntry.Status.SCHEDULED,
+        provider="mal",
+        format=format_name,
+        observation_id=observation_id,
+        external_id=str(item.get("mal_id") or ""),
+    )
+
+
+def _as_date(value: Any) -> date | None:
+    if isinstance(value, date):
+        return value
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        return date.fromisoformat(value.strip()[:10])
+    except ValueError:
+        return None
 
 
 def _canonical_entity(entity: Entity) -> Entity | None:
@@ -460,9 +526,13 @@ def _source_role(*, chosen: CandidateBar, bar: CandidateBar) -> str:
     if bar is chosen:
         if bar.precision == AiringBoardEntry.Precision.MINUTE:
             return "precise" if bar.provider == "anilist" else "primary"
+        if bar.precision == AiringBoardEntry.Precision.DAY:
+            return "date-primary"
         return "weekday-primary"
     if bar.precision == AiringBoardEntry.Precision.MINUTE:
         return "corroboration"
+    if bar.precision == AiringBoardEntry.Precision.DAY:
+        return "date-corroboration"
     return "weekday-corroboration"
 
 
