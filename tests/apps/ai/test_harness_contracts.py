@@ -6,6 +6,7 @@ from pydantic import Field
 from apps.ai.models import AgentRun
 from apps.ai.runtime.budget import Budget
 from apps.ai.runtime.state_machine import AgentRunStateMachine, RunTransition
+from apps.ai.skills.registry import create_default_skill_registry
 from apps.ai.tools.registry import (
     ToolDefinition,
     ToolInput,
@@ -15,6 +16,7 @@ from apps.ai.tools.registry import (
 from apps.sync.models import SyncCampaign
 from apps.sync.services.campaign_ai import SyncAIContext, sync_ai_service
 from apps.sync.services.campaign_state import SyncCampaignStateMachine
+from integrations.ai.gateway import USE_CASE_TIERS, ModelTier
 
 
 class EchoInput(ToolInput):
@@ -57,6 +59,17 @@ def test_invalid_run_transition_is_rejected_without_database_write() -> None:
     run = AgentRun(kind=AgentRun.Kind.USER_AGENT, status=AgentRun.Status.SUCCEEDED)
 
     assert not AgentRunStateMachine(run).transition(RunTransition.START)
+
+
+def test_every_skill_use_case_is_pinned_to_a_known_tier() -> None:
+    registry = create_default_skill_registry()
+
+    assert registry.list_all()
+    for skill in registry.list_all():
+        assert skill.use_case in USE_CASE_TIERS, (
+            f"Skill '{skill.name}' declares use_case '{skill.use_case}' with no tier."
+        )
+        assert USE_CASE_TIERS[skill.use_case] is ModelTier.FAST
 
 
 def test_default_registry_exposes_namespaced_read_tools() -> None:

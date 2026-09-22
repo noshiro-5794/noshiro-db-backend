@@ -2,6 +2,9 @@
 
 Skills are deterministic application components that may request model
 inference. They do not write canonical data directly.
+
+Model choice is not declared here: the gateway maps each ``use_case`` to a
+budget tier, so a batch skill can never quietly request an expensive model.
 """
 
 from __future__ import annotations
@@ -24,8 +27,6 @@ class SkillDefinition:
     output_model: type[BaseModel]
     handler: Callable[..., BaseModel]
     use_case: str
-    mode: str = "shadow"
-    model_preference: str = "fast"
 
     @property
     def content_hash(self) -> str:
