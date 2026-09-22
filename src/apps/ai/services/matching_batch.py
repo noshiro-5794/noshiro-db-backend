@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from apps.index.models import MatchCandidate
+from config.celery import app as celery_app
 
 
 class AIMatchingBatchService:
@@ -19,10 +20,12 @@ class AIMatchingBatchService:
     def dispatch(self, *, limit: int) -> dict[str, Any]:
         candidates = self.pending_candidates(limit=limit)
         candidate_ids = [str(candidate.pk) for candidate in candidates]
-        from apps.ai.tasks import evaluate_match_candidate_task
-
         for candidate_id in candidate_ids:
-            evaluate_match_candidate_task.delay(candidate_id)
+            celery_app.send_task(
+                "apps.ai.tasks.evaluate_match_candidate_task",
+                args=[candidate_id],
+                queue="ai",
+            )
         return {
             "dispatched": len(candidate_ids),
             "candidate_ids": candidate_ids,

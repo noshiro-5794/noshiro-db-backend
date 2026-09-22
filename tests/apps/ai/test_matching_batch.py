@@ -44,11 +44,15 @@ def test_dispatch_only_selects_candidates_without_proposals() -> None:
         confidence="0.1000",
     )
 
-    with patch("apps.ai.tasks.evaluate_match_candidate_task.delay") as delay:
+    with patch("apps.ai.services.matching_batch.celery_app.send_task") as send_task:
         result = ai_matching_batch_service.dispatch(limit=10)
 
     assert result["candidate_ids"] == [str(pending.pk)]
-    delay.assert_called_once_with(str(pending.pk))
+    send_task.assert_called_once_with(
+        "apps.ai.tasks.evaluate_match_candidate_task",
+        args=[str(pending.pk)],
+        queue="ai",
+    )
 
 
 def test_task_uses_configured_batch_size() -> None:
