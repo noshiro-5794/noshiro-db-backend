@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date, timedelta
 from typing import Any
 
 from django.utils import timezone
@@ -66,7 +67,11 @@ class AniListSeasonSyncService:
             )
             pages.append(page_data)
             for item in page_data.get("media") or []:
-                if isinstance(item, dict) and isinstance(item.get("id"), int):
+                if (
+                    isinstance(item, dict)
+                    and isinstance(item.get("id"), int)
+                    and _within_airing_horizon(item)
+                ):
                     item_payloads[str(item["id"])] = item
             page_info = page_data.get("pageInfo") or {}
             if (
@@ -218,6 +223,30 @@ class AniListSeasonSyncService:
 
 
 anilist_season_service = AniListSeasonSyncService()
+
+
+def _within_airing_horizon(media: dict[str, Any]) -> bool:
+    """Keep already-airing media plus premieres close enough to matter.
+
+    ``NOT_YET_RELEASED`` matches everything AniList has ever announced, so the
+    list is trimmed to media that started recently or starts within the next
+    horizon. Without this the snapshot would be dominated by works years away.
+    """
+    if str(media.get("status") or "").upper() == "RELEASING":
+        return True
+    start = media.get("startDate") or {}
+    if not isinstance(start, dict):
+        return False
+    try:
+        started_on = date(
+            int(start["year"]),
+            int(start.get("month") or 1),
+            int(start.get("day") or 1),
+        )
+    except (KeyError, TypeError, ValueError):
+        return False
+    today = timezone.localdate()
+    return today - timedelta(days=30) <= started_on <= today + timedelta(days=150)
 
 
 def current_anilist_season() -> tuple[str, int]:

@@ -144,7 +144,7 @@ class AniListClient:
     query ($page: Int!, $perPage: Int!) {
       Page(page: $page, perPage: $perPage) {
         pageInfo { hasNextPage total }
-        media(type: ANIME, status: RELEASING, sort: [ID]) {
+        media(type: ANIME, status_in: [RELEASING, NOT_YET_RELEASED], sort: [ID]) {
           id
           idMal
           type

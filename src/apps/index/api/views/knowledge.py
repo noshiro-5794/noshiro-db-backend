@@ -825,6 +825,7 @@ class AiringBoardEntryListView(APIView):
             data.append(
                 {
                     "id": entry.id,
+                    "season_key": board.season_key,
                     "work_id": entry.work_id,
                     "episode_entity_id": entry.episode_entity_id,
                     "episode_number": entry.episode_number,

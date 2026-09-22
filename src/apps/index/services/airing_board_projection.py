@@ -145,7 +145,9 @@ class AiringBoardProjectionService:
 
     def _candidates_for_window(self, *, season_key: str) -> list[CandidateBar]:
         now = timezone.now()
-        end = now + timedelta(days=7)
+        # A month of horizon keeps premieres that were announced before their
+        # first episode airs, which is what a "what is coming up" calendar needs.
+        end = now + timedelta(days=30)
         formats = self._format_index()
         candidates: list[CandidateBar] = []
         candidates.extend(self._bangumi_weekday_candidates(formats=formats))

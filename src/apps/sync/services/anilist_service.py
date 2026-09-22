@@ -668,6 +668,20 @@ class AniListImportService:
         schedule = media.get("airingSchedule") or {}
         nodes = schedule.get("nodes") or []
         if not isinstance(nodes, list) or not nodes:
+            # Not every releasing media publishes its schedule nodes, but most
+            # of them still advertise the next episode. Without this fallback an
+            # upcoming premiere would never reach the calendar.
+            next_episode = media.get("nextAiringEpisode") or {}
+            airing_at = self._as_int(next_episode.get("airingAt"))
+            if airing_at is None:
+                return
+            nodes = [
+                {
+                    "episode": self._as_int(next_episode.get("episode")),
+                    "airingAt": airing_at,
+                }
+            ]
+        if not isinstance(nodes, list) or not nodes:
             return
         calendar_recorded = source_record_service.record(
             namespace_spec=ANILIST_CALENDAR_NAMESPACE,

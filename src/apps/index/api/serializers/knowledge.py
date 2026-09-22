@@ -233,6 +233,7 @@ class AiringBoardEntrySerializer(serializers.Serializer):
     """Gantt-ready board bar from the curated multi-source projection."""
 
     id = serializers.UUIDField()
+    season_key = serializers.CharField(allow_blank=True)
     work_id = serializers.UUIDField()
     episode_entity_id = serializers.UUIDField(allow_null=True)
     episode_number = serializers.IntegerField(allow_null=True, min_value=1)
