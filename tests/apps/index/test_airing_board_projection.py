@@ -24,9 +24,12 @@ from apps.index.services import (
 )
 from apps.index.services.airing_board_projection import (
     CandidateBar,
+    _board_window,
     _choose_bar,
     _corroborates,
     _format_allowed,
+    _season_bounds,
+    _season_end_date,
     _season_switch_allowed,
 )
 from apps.sync.providers.contracts import (
@@ -122,6 +125,22 @@ def _record_mal_season_observation(
         schema_version="2",
     )
     return recorded.record
+
+
+def test_season_bounds_cover_the_whole_quarter() -> None:
+    start, end = _season_bounds("2026Q3")
+
+    assert start.isoformat() == "2026-06-30T15:00:00+00:00"  # 2026-07-01 00:00 JST
+    assert end.isoformat() == "2026-09-30T15:00:00+00:00"  # half-open, 2026-10-01 JST
+    assert _season_end_date("2026Q4").isoformat() == "2026-12-31"
+
+
+def test_board_window_reaches_the_neighbouring_months() -> None:
+    start, end = _board_window("2026Q3")
+
+    # June is reachable from July, November from September.
+    assert start.isoformat() == "2026-05-31T15:00:00+00:00"
+    assert end.isoformat() == "2026-10-31T15:00:00+00:00"
 
 
 def test_rebuild_projects_mal_season_onto_one_board_entry() -> None:

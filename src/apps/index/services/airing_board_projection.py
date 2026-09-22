@@ -144,19 +144,21 @@ class AiringBoardProjectionService:
         return board
 
     def _candidates_for_window(self, *, season_key: str) -> list[CandidateBar]:
-        now = timezone.now()
-        # A month of horizon keeps premieres that were announced before their
-        # first episode airs, which is what a "what is coming up" calendar needs.
-        end = now + timedelta(days=30)
+        # The board is a season window widened by a month on each side, not a
+        # rolling "next 30 days" view. A future-only window dropped every work
+        # that finished as soon as the board was rebuilt, so the season's own
+        # history vanished exactly when a season ends; and a bare season window
+        # would hide the neighbouring months a calendar visitor expects to see.
+        start, end = _board_window(season_key)
         formats = self._format_index()
         candidates: list[CandidateBar] = []
         candidates.extend(self._bangumi_weekday_candidates(formats=formats))
         candidates.extend(
-            self._anilist_minute_candidates(now=now, end=end, formats=formats)
+            self._anilist_minute_candidates(now=start, end=end, formats=formats)
         )
         candidates.extend(
             self._mal_season_candidates(
-                now=now,
+                now=start,
                 end=end,
                 season_key=season_key,
             )
@@ -548,6 +550,62 @@ def _season_start_date(season_key: str) -> date | None:
         return None
     quarter = int(value[-1])
     return date(year, 1 + (quarter - 1) * 3, 1)
+
+
+def _season_end_date(season_key: str) -> date | None:
+    """Last day of the season, i.e. the day before the next quarter starts."""
+    start = _season_start_date(season_key)
+    if start is None:
+        return None
+    next_month = start.month + 3
+    next_year = start.year + (1 if next_month > 12 else 0)
+    if next_month > 12:
+        next_month -= 12
+    return date(next_year, next_month, 1) - timedelta(days=1)
+
+
+def _season_bounds(season_key: str) -> tuple[datetime, datetime]:
+    """UTC half-open window `[start, end)` covered by a season key."""
+    zone = ZoneInfo("Asia/Tokyo")
+    start_date = _season_start_date(season_key)
+    end_date = _season_end_date(season_key)
+    if start_date is None or end_date is None:
+        now = timezone.now()
+        return now - timedelta(days=7), now + timedelta(days=30)
+    start = datetime.combine(start_date, time(hour=0), tzinfo=zone).astimezone(UTC)
+    end = datetime.combine(
+        end_date + timedelta(days=1), time(hour=0), tzinfo=zone
+    ).astimezone(UTC)
+    return start, end
+
+
+def _add_months(value: date, months: int) -> date:
+    """First day of the month `months` away from `value`."""
+    index = value.month - 1 + months
+    return date(value.year + index // 12, index % 12 + 1, 1)
+
+
+def _board_window(season_key: str) -> tuple[datetime, datetime]:
+    """Season window plus one month on each side.
+
+    A visitor looking at any month of the season must be able to reach the month
+    before and the month after it, so the data window is wider than the season
+    even though the board keeps a single season identity.
+    """
+    start_date = _season_start_date(season_key)
+    end_date = _season_end_date(season_key)
+    if start_date is None or end_date is None:
+        return _season_bounds(season_key)
+    zone = ZoneInfo("Asia/Tokyo")
+    start = datetime.combine(
+        _add_months(start_date, -1), time(hour=0), tzinfo=zone
+    ).astimezone(UTC)
+    end = datetime.combine(
+        _add_months(date(end_date.year, end_date.month, 1), 2),
+        time(hour=0),
+        tzinfo=zone,
+    ).astimezone(UTC)
+    return start, end
 
 
 def _season_switch_date(season_key: str) -> date:
