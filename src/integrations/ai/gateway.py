@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from decimal import Decimal
+from enum import StrEnum
 from typing import Any
 
 import httpx
@@ -11,22 +12,32 @@ from django.conf import settings
 from integrations.ai.exceptions import AIProviderError
 from shared.outbound import httpx_client_kwargs
 
-_MODEL_ROUTING: dict[str, str] = {
-    "entity_matching": "AI_FAST_MODEL",
-    "entity_classification": "AI_FAST_MODEL",
-    "bangumi_link_search": "AI_FAST_MODEL",
-    "evidence_extraction": "AI_FAST_MODEL",
-    "conflict_detection": "AI_FAST_MODEL",
-    "info_completion": "AI_FAST_MODEL",
-    "field_normalization": "AI_FAST_MODEL",
-    "knowledge_qa": "AI_FAST_MODEL",
-    "schedule_completion": "AI_FAST_MODEL",
-    "user_agent": "AI_FAST_MODEL",
-    "agent_loop": "AI_FAST_MODEL",
-    "mal_recall": "AI_FAST_MODEL",
-}
 
-_CLASSIFICATION_FALLBACK_THRESHOLD = Decimal("0.85")
+class ModelTier(StrEnum):
+    """Budget tiers. Batch work stays on Fast; user intent uses Reasoning."""
+
+    FAST = "AI_FAST_MODEL"
+    REASONING = "AI_REASONING_MODEL"
+
+
+# Every offline/batch decision path is explicitly pinned to the cheap tier.
+USE_CASE_TIERS: dict[str, ModelTier] = {
+    "entity_matching": ModelTier.FAST,
+    "entity_classification": ModelTier.FAST,
+    "bangumi_link_search": ModelTier.FAST,
+    "evidence_extraction": ModelTier.FAST,
+    "conflict_detection": ModelTier.FAST,
+    "info_completion": ModelTier.FAST,
+    "field_normalization": ModelTier.FAST,
+    "schedule_completion": ModelTier.FAST,
+    "agent_loop": ModelTier.FAST,
+    "mal_recall": ModelTier.FAST,
+    # Interactive user-facing agent work needs stronger intent/database
+    # reasoning than batch classification.
+    "knowledge_qa": ModelTier.REASONING,
+    "user_agent": ModelTier.REASONING,
+    "user_agent_loop": ModelTier.REASONING,
+}
 
 
 class OpenAICompatibleGateway:
@@ -36,8 +47,8 @@ class OpenAICompatibleGateway:
         self._client = client
 
     def resolve_model(self, use_case: str) -> str:
-        setting_key = _MODEL_ROUTING.get(use_case, "AI_PRIMARY_MODEL")
-        return getattr(settings, setting_key)
+        tier = USE_CASE_TIERS.get(use_case, ModelTier.REASONING)
+        return getattr(settings, tier.value)
 
     @property
     def client(self) -> httpx.Client:
@@ -64,14 +75,6 @@ class OpenAICompatibleGateway:
             raise AIProviderError("AI_AGENT_API_KEY is not configured.")
         model = self.resolve_model(use_case)
         result, usage = self._call(model, system_prompt, payload)
-        if (
-            use_case == "entity_classification"
-            and model == settings.AI_FAST_MODEL
-            and self._confidence(result) < _CLASSIFICATION_FALLBACK_THRESHOLD
-        ):
-            result, usage = self._call(
-                settings.AI_PRIMARY_MODEL, system_prompt, payload
-            )
         return result, usage
 
     def complete_agent(

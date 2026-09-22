@@ -317,6 +317,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.sync.tasks.season.check_season_rollover_task",
         "schedule": crontab(minute=0, hour="*/6"),
     },
+    "evaluate-pending-matches": {
+        "task": "apps.ai.tasks.evaluate_pending_candidates_task",
+        "schedule": crontab(minute="*/30"),
+    },
     "worker-heartbeat": {
         "task": "apps.sync.tasks.maintenance.worker_heartbeat",
         "schedule": 60.0,
@@ -401,14 +405,12 @@ ANILIST_RATE_LIMIT_INTERVAL = env.float(
 )
 
 # MAL anime data is fetched through the official MyAnimeList API v2. Public
-# read-only endpoints are authenticated with the client ID header only; the
-# client secret is reserved for future OAuth user-scope features.
+# read-only endpoints are authenticated with the client ID header only.
 MAL_API_BASE_URL = env(
     "MAL_API_BASE_URL",
     default="https://api.myanimelist.net/v2",
 )
 MAL_API_CLIENT_ID = env("MAL_API_CLIENT_ID", default=None)
-MAL_API_CLIENT_SECRET = env("MAL_API_CLIENT_SECRET", default=None)
 MAL_USER_AGENT = env(
     "MAL_USER_AGENT",
     default="Noshiro_5794/noshiro_db (https://github.com/noshiro-5794)",
@@ -427,11 +429,6 @@ AI_AGENT_API_BASE_URL = env(
 AI_AGENT_API_KEY = env("AI_AGENT_API_KEY", default=None)
 
 
-AI_PRIMARY_MODEL = env(
-    "AI_PRIMARY_MODEL",
-    default="zai-org/GLM-5.3",
-)
-
 AI_FAST_MODEL = env(
     "AI_FAST_MODEL",
     default="deepseek-ai/DeepSeek-V4-Flash",
@@ -442,12 +439,8 @@ AI_REASONING_MODEL = env(
     default="deepseek-ai/DeepSeek-V4-Pro",
 )
 
-AI_EMBEDDING_MODEL = env(
-    "AI_EMBEDDING_MODEL",
-    default="Qwen/Qwen3-Embedding-8B",
-)
-
 AI_AGENT_TIMEOUT = env.float("AI_AGENT_TIMEOUT", default=30)
+AI_MATCH_EVAL_BATCH_SIZE = env.int("AI_MATCH_EVAL_BATCH_SIZE", default=50)
 
 # Web evidence for AI enrichment. WEB_SEARCH_PROVIDER is one of "tavily",
 # "none"; without a key the harness degrades to model-only evidence.

@@ -7,20 +7,20 @@ from django.test import override_settings
 
 from integrations.ai import AIProviderError, ai_gateway
 from integrations.ai.gateway import (
-    _MODEL_ROUTING,
+    USE_CASE_TIERS,
     OpenAICompatibleGateway,
 )
 
 
 class TestResolveModel:
     def test_known_use_case_returns_correct_setting(self) -> None:
-        for use_case, setting_key in _MODEL_ROUTING.items():
+        for use_case, tier in USE_CASE_TIERS.items():
             model = ai_gateway.resolve_model(use_case)
-            assert model == getattr(settings, setting_key)
+            assert model == getattr(settings, tier.value)
 
-    def test_unknown_use_case_falls_back_to_primary(self) -> None:
+    def test_unknown_use_case_falls_back_to_reasoning(self) -> None:
         model = ai_gateway.resolve_model("nonexistent")
-        assert model == settings.AI_PRIMARY_MODEL
+        assert model == settings.AI_REASONING_MODEL
 
     @override_settings(AI_FAST_MODEL="custom-fast")
     def test_matching_use_case_uses_fast_tier(self) -> None:
@@ -29,6 +29,11 @@ class TestResolveModel:
     @override_settings(AI_FAST_MODEL="custom-fast")
     def test_completion_use_case_uses_fast_tier(self) -> None:
         assert ai_gateway.resolve_model("info_completion") == "custom-fast"
+
+    @override_settings(AI_REASONING_MODEL="custom-reasoning")
+    def test_user_facing_use_case_uses_reasoning_tier(self) -> None:
+        assert ai_gateway.resolve_model("user_agent") == "custom-reasoning"
+        assert ai_gateway.resolve_model("knowledge_qa") == "custom-reasoning"
 
 
 class TestConfidence:
@@ -91,39 +96,11 @@ class TestCompleteJson:
         assert usage["input_tokens"] == 10
         assert usage["output_tokens"] == 5
 
-    def test_classification_fallback_when_confidence_low(self) -> None:
-        fake_response_low = Mock()
-        fake_response_low.raise_for_status.return_value = None
-        fake_response_low.json.return_value = {
-            "choices": [{"message": {"content": '{"confidence": "0.5"}'}}],
-            "usage": {"prompt_tokens": 10, "completion_tokens": 5},
-        }
-        fake_response_high = Mock()
-        fake_response_high.raise_for_status.return_value = None
-        fake_response_high.json.return_value = {
-            "choices": [{"message": {"content": '{"confidence": "0.95"}'}}],
-            "usage": {"prompt_tokens": 20, "completion_tokens": 10},
-        }
-        fake_client = Mock()
-        fake_client.post.side_effect = [fake_response_low, fake_response_high]
-
-        gw = OpenAICompatibleGateway(client=fake_client)
-        with override_settings(AI_AGENT_API_KEY="sk-test"):
-            result, usage = gw.complete_json(
-                system_prompt="test",
-                payload={"key": "value"},
-                use_case="entity_classification",
-            )
-
-        assert result == {"confidence": "0.95"}
-        assert usage["model"] == settings.AI_PRIMARY_MODEL
-        assert fake_client.post.call_count == 2
-
-    def test_no_fallback_when_confidence_high(self) -> None:
+    def test_classification_stays_on_fast_tier_with_low_confidence(self) -> None:
         fake_response = Mock()
         fake_response.raise_for_status.return_value = None
         fake_response.json.return_value = {
-            "choices": [{"message": {"content": '{"confidence": "0.95"}'}}],
+            "choices": [{"message": {"content": '{"confidence": "0.5"}'}}],
             "usage": {"prompt_tokens": 10, "completion_tokens": 5},
         }
         fake_client = Mock()
@@ -131,13 +108,12 @@ class TestCompleteJson:
 
         gw = OpenAICompatibleGateway(client=fake_client)
         with override_settings(AI_AGENT_API_KEY="sk-test"):
-            result, usage = gw.complete_json(
+            _result, usage = gw.complete_json(
                 system_prompt="test",
                 payload={"key": "value"},
                 use_case="entity_classification",
             )
 
-        assert result == {"confidence": "0.95"}
         assert usage["model"] == settings.AI_FAST_MODEL
         assert fake_client.post.call_count == 1
 

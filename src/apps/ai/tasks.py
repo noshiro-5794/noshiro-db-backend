@@ -1,7 +1,9 @@
 from celery import shared_task
+from django.conf import settings
 
 from apps.ai.services import (
     ai_knowledge_proposal_service,
+    ai_matching_batch_service,
     ai_matching_service,
     schedule_completion_service,
 )
@@ -64,3 +66,12 @@ def complete_missing_schedule_slots_task(
     apply: bool = True,
 ) -> dict:
     return schedule_completion_service.run(limit=limit, apply=apply)
+
+
+@shared_task(
+    soft_time_limit=900,
+    time_limit=960,
+)
+def evaluate_pending_candidates_task(limit: int | None = None) -> dict:
+    batch_size = max(1, int(limit or settings.AI_MATCH_EVAL_BATCH_SIZE))
+    return ai_matching_batch_service.dispatch(limit=batch_size)
