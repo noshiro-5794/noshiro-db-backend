@@ -40,7 +40,7 @@ def test_quarter_maps_to_mal_season_name() -> None:
 @override_settings(
     MAL_API_BASE_URL="https://api.myanimelist.net/v2",
     MAL_API_CLIENT_ID="test-client-id",
-    MAL_USER_AGENT="Noshiro_5794/noshiro_db (https://github.com/noshiro-5794)",
+    MAL_USER_AGENT="noshiro-db-test (+https://example.test/contact)",
     MAL_TIMEOUT=30,
     MAL_RATE_LIMIT_INTERVAL=0.1,
 )
@@ -56,9 +56,7 @@ def test_mal_http_client_is_created_lazily_with_client_id_header() -> None:
             headers={
                 "Accept": "application/json",
                 "X-MAL-CLIENT-ID": "test-client-id",
-                "User-Agent": (
-                    "Noshiro_5794/noshiro_db (https://github.com/noshiro-5794)"
-                ),
+                "User-Agent": ("noshiro-db-test (+https://example.test/contact)"),
             },
             timeout=30,
             follow_redirects=True,

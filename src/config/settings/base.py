@@ -339,13 +339,31 @@ CELERY_BEAT_SCHEDULE = {
 
 RESEND_API_KEY = env("RESEND_API_KEY", default=None)
 
-EMAIL_FROM = env("EMAIL_FROM", default="noreply@noshiro.moe")
+EMAIL_FROM = env("EMAIL_FROM", default="noreply@localhost")
 
-FRONTEND_SITE_URL = env("FRONTEND_SITE_URL", default="https://app.noshiro.moe")
+FRONTEND_SITE_URL = env("FRONTEND_SITE_URL", default="http://localhost:5173")
 
 PROBLEM_BASE_URI = env(
     "PROBLEM_BASE_URI",
     default=f"{FRONTEND_SITE_URL.rstrip('/')}/problems/",
+)
+
+
+def _outbound_user_agent(app_name: str, contact: str) -> str:
+    """Render the User-Agent shared by every provider client."""
+    return f"{app_name} (+{contact})" if contact else app_name
+
+
+# Outbound HTTP identity. Bangumi, VNDB, AniList, and MAL all expect a
+# contactable User-Agent, but the operator's identity does not belong in the
+# source tree. Every provider derives from these values; per-provider overrides
+# remain available for providers with a stricter format. Production refuses to
+# boot while no contact is configured at all.
+APP_NAME = env("APP_NAME", default="noshiro-db")
+APP_CONTACT = env("APP_CONTACT", default="")
+OUTBOUND_USER_AGENT = env(
+    "OUTBOUND_USER_AGENT",
+    default=_outbound_user_agent(APP_NAME, APP_CONTACT),
 )
 
 BANGUMI_API_BASE_URL = env(
@@ -357,7 +375,7 @@ BANGUMI_API_KEY = env("BANGUMI_API_KEY", default=None)
 
 BANGUMI_USER_AGENT = env(
     "BANGUMI_USER_AGENT",
-    default="Noshiro_5794/noshiro_db (https://github.com/noshiro-5794)",
+    default=OUTBOUND_USER_AGENT,
 )
 
 BANGUMI_TIMEOUT = env.float("BANGUMI_TIMEOUT", default=30)
@@ -382,7 +400,7 @@ VNDB_API_BASE_URL = env(
 )
 VNDB_USER_AGENT = env(
     "VNDB_USER_AGENT",
-    default="Noshiro_5794/noshiro_db (https://github.com/noshiro-5794)",
+    default=OUTBOUND_USER_AGENT,
 )
 VNDB_TIMEOUT = env.float("VNDB_TIMEOUT", default=30)
 VNDB_RATE_LIMIT_INTERVAL = env.float(
@@ -396,7 +414,7 @@ ANILIST_API_BASE_URL = env(
 )
 ANILIST_USER_AGENT = env(
     "ANILIST_USER_AGENT",
-    default="Noshiro_5794/noshiro_db (https://github.com/noshiro-5794)",
+    default=OUTBOUND_USER_AGENT,
 )
 ANILIST_TIMEOUT = env.float("ANILIST_TIMEOUT", default=30)
 ANILIST_RATE_LIMIT_INTERVAL = env.float(
@@ -413,7 +431,7 @@ MAL_API_BASE_URL = env(
 MAL_API_CLIENT_ID = env("MAL_API_CLIENT_ID", default=None)
 MAL_USER_AGENT = env(
     "MAL_USER_AGENT",
-    default="Noshiro_5794/noshiro_db (https://github.com/noshiro-5794)",
+    default=OUTBOUND_USER_AGENT,
 )
 MAL_TIMEOUT = env.float("MAL_TIMEOUT", default=30)
 MAL_RATE_LIMIT_INTERVAL = env.float(

@@ -40,6 +40,12 @@ if HCAPTCHA_ENABLED and not HCAPTCHA_SECRET_KEY:
         "HCAPTCHA_SECRET_KEY must be set when HCAPTCHA_ENABLED is True."
     )
 
+if OUTBOUND_USER_AGENT == APP_NAME:
+    raise ImproperlyConfigured(
+        "Set APP_CONTACT (or OUTBOUND_USER_AGENT) so upstream providers can "
+        "reach the operator of this deployment."
+    )
+
 if not JWT_REFRESH_COOKIE_SECURE:
     raise ImproperlyConfigured("JWT_REFRESH_COOKIE_SECURE must be True in production.")
 

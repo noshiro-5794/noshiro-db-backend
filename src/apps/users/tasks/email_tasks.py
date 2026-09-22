@@ -15,7 +15,6 @@ BRAND_TAGLINE = "Collect · Preserve · Relive"
 ACCENT_COLOR = "#7F6FB0"
 ACCENT_DARK = "#665792"
 CODE_EXPIRE_MINUTES = 5
-DEFAULT_SITE_URL = "https://app.noshiro.moe"
 
 PURPOSE_COPY = {
     "register": {
@@ -43,7 +42,7 @@ PURPOSE_COPY = {
 
 
 def get_site_url() -> str:
-    return getattr(settings, "FRONTEND_SITE_URL", DEFAULT_SITE_URL).rstrip("/")
+    return settings.FRONTEND_SITE_URL.rstrip("/")
 
 
 def get_purpose_copy(purpose: str | None) -> dict[str, str]:

@@ -19,7 +19,7 @@ from apps.sync.providers.vndb import VNDB_SOURCE, VNDBAPIError, VNDBClient
     BANGUMI_API_BASE_URL="https://api.bgm.tv",
     BANGUMI_API_KEY=None,
     BANGUMI_TIMEOUT=30,
-    BANGUMI_USER_AGENT=("Noshiro_5794/noshiro_db (https://github.com/noshiro-5794)"),
+    BANGUMI_USER_AGENT=("noshiro-db-test (+https://example.test/contact)"),
 )
 def test_bangumi_http_client_is_created_lazily() -> None:
     with patch("apps.sync.providers.bangumi.httpx.Client") as client_factory:
@@ -33,9 +33,7 @@ def test_bangumi_http_client_is_created_lazily() -> None:
             base_url="https://api.bgm.tv",
             headers={
                 "Accept": "application/json",
-                "User-Agent": (
-                    "Noshiro_5794/noshiro_db (https://github.com/noshiro-5794)"
-                ),
+                "User-Agent": ("noshiro-db-test (+https://example.test/contact)"),
             },
             timeout=30,
             follow_redirects=True,
@@ -46,7 +44,7 @@ def test_bangumi_http_client_is_created_lazily() -> None:
     BANGUMI_API_BASE_URL="https://api.bgm.tv",
     BANGUMI_API_KEY=None,
     BANGUMI_TIMEOUT=30,
-    BANGUMI_USER_AGENT=("Noshiro_5794/noshiro_db (https://github.com/noshiro-5794)"),
+    BANGUMI_USER_AGENT=("noshiro-db-test (+https://example.test/contact)"),
 )
 def test_http_client_can_be_recreated_after_close() -> None:
     initial_client = Mock()
@@ -61,9 +59,7 @@ def test_http_client_can_be_recreated_after_close() -> None:
             base_url="https://api.bgm.tv",
             headers={
                 "Accept": "application/json",
-                "User-Agent": (
-                    "Noshiro_5794/noshiro_db (https://github.com/noshiro-5794)"
-                ),
+                "User-Agent": ("noshiro-db-test (+https://example.test/contact)"),
             },
             timeout=30,
             follow_redirects=True,
