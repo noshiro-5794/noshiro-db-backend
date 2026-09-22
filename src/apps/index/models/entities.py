@@ -110,6 +110,11 @@ class AnimeProfile(TimestampedModel):
     format = models.CharField(max_length=64, blank=True)
     source_material = models.CharField(max_length=128, blank=True)
     episode_count = models.PositiveIntegerField(null=True, blank=True)
+    # Broadcast run of the work. A weekly schedule is only truthful between the
+    # premiere and the finale, so a calendar needs to know those bounds instead
+    # of projecting one slot across a whole season.
+    premiered_on = models.DateField(null=True, blank=True)
+    ended_on = models.DateField(null=True, blank=True)
 
     class Meta:
         db_table = "anime_profile"

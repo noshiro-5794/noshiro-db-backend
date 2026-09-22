@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -86,6 +86,16 @@ class AniListImportService:
             else Entity.Audience.GENERAL
         )
 
+    @staticmethod
+    def _as_date_value(value: dict[str, Any] | None) -> date | None:
+        raw = AniListImportService._as_date(value)
+        if raw is None:
+            return None
+        try:
+            return date.fromisoformat(raw)
+        except ValueError:
+            return None
+
     def import_media(self, anilist_id: int) -> Entity:
         if (
             not isinstance(anilist_id, int)
@@ -146,13 +156,21 @@ class AniListImportService:
             entity=entity,
             defaults={"work_type": Work.WorkType.ANIME},
         )
+        anime_defaults: dict[str, Any] = {
+            "format": media.get("format") or "",
+            "source_material": media.get("source") or "",
+            "episode_count": self._as_int(media.get("episodes")),
+        }
+        # Never blank a broadcast date another provider already supplied.
+        for field, raw in (
+            ("premiered_on", self._as_date_value(media.get("startDate"))),
+            ("ended_on", self._as_date_value(media.get("endDate"))),
+        ):
+            if raw is not None:
+                anime_defaults[field] = raw
         AnimeProfile.objects.update_or_create(
             work=work,
-            defaults={
-                "format": media.get("format") or "",
-                "source_material": media.get("source") or "",
-                "episode_count": self._as_int(media.get("episodes")),
-            },
+            defaults=anime_defaults,
         )
         knowledge_ingestion_service._upsert_provider_representation(
             provider_record=recorded.record,

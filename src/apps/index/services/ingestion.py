@@ -226,12 +226,18 @@ class KnowledgeIngestionService:
             defaults={"work_type": work_type},
         )
         if work_type == Work.WorkType.ANIME:
+            anime_defaults = {
+                "episode_count": mapped_data.get("total_episodes")
+                or mapped_data.get("eps")
+                or None,
+            }
+            # A provider that does not publish a broadcast date must not erase
+            # one another provider already supplied.
+            if mapped_data.get("date") is not None:
+                anime_defaults["premiered_on"] = mapped_data["date"]
             AnimeProfile.objects.update_or_create(
                 work=work,
-                defaults={
-                    "episode_count": mapped_data.get("total_episodes")
-                    or mapped_data.get("eps")
-                },
+                defaults=anime_defaults,
             )
         elif work_type == Work.WorkType.GALGAME:
             GalgameProfile.objects.get_or_create(work=work)

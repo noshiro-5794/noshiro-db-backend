@@ -101,12 +101,20 @@ class MALImportService:
             entity=entity,
             defaults={"work_type": Work.WorkType.ANIME},
         )
+        anime_defaults: dict[str, Any] = {
+            "format": self._format(item.get("media_type")),
+            "episode_count": self._as_int(item.get("num_episodes")),
+        }
+        # Never blank a broadcast date another provider already supplied.
+        for field, raw in (
+            ("premiered_on", _parse_iso_date(item.get("start_date"))),
+            ("ended_on", _parse_iso_date(item.get("end_date"))),
+        ):
+            if raw is not None:
+                anime_defaults[field] = raw
         AnimeProfile.objects.update_or_create(
             work=work,
-            defaults={
-                "format": self._format(item.get("media_type")),
-                "episode_count": self._as_int(item.get("num_episodes")),
-            },
+            defaults=anime_defaults,
         )
         knowledge_ingestion_service._upsert_provider_representation(
             provider_record=recorded.record,

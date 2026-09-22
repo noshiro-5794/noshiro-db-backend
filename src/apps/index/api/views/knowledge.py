@@ -788,11 +788,18 @@ class AiringBoardEntryListView(APIView):
         if board is None:
             return Response([])
         adult_allowed = request_allows_adult_content(request)
-        formats = dict(
-            AnimeProfile.objects.filter(work__entity_id__isnull=False).values_list(
-                "work__entity_id", "format"
+        profiles = {
+            entity_id: (format_value, premiered_on, ended_on, episode_count)
+            for entity_id, format_value, premiered_on, ended_on, episode_count in (
+                AnimeProfile.objects.filter(work__entity_id__isnull=False).values_list(
+                    "work__entity_id",
+                    "format",
+                    "premiered_on",
+                    "ended_on",
+                    "episode_count",
+                )
             )
-        )
+        }
         entries = (
             AiringBoardEntry.objects.filter(board=board)
             .select_related("work__entity", "episode_entity")
@@ -818,6 +825,7 @@ class AiringBoardEntryListView(APIView):
             )
             if summary["audience"] == Entity.Audience.ADULT and not adult_allowed:
                 continue
+            profile = profiles.get(work_entity.id) or ("", None, None, None)
             starts_at = entry.starts_at
             ends_at = None
             if starts_at is not None and entry.duration_minutes:
@@ -836,7 +844,10 @@ class AiringBoardEntryListView(APIView):
                     "weekday": entry.weekday,
                     "duration_minutes": entry.duration_minutes,
                     "precision": entry.precision,
-                    "format": str(formats.get(work_entity.id) or ""),
+                    "format": str(profile[0] or ""),
+                    "premiered_on": profile[1],
+                    "ended_on": profile[2],
+                    "episode_count": profile[3],
                     "status": entry.status,
                     "decision": entry.decision,
                     "confidence": float(entry.confidence),
