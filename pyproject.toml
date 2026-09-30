@@ -35,9 +35,9 @@ dependencies = [
 [dependency-groups]
 dev = [
     "diff-cover>=10,<11",
-    "django-stubs>=5.2,<6",
+    "django-stubs>=5.2,<7",
     "djangorestframework-stubs>=3.16,<4",
-    "mypy>=1.17,<2",
+    "mypy>=1.17,<3",
     "pip-audit>=2.10,<3",
     "pytest>=8,<10",
     "pytest-cov>=7,<8",
